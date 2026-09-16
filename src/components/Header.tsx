@@ -43,8 +43,11 @@ export const Header: React.FC<HeaderProps> = ({
   const isPending = (s: string) => s === 'Pending' || s === 'PENDING';
   const isInProgress = (s: string) => s === 'In Progress' || s === 'IN_PROGRESS' || s === 'DISPATCHED';
 
-  const highSeverityCount = issues.filter(
+  const criticalHighCount = issues.filter(
     (i) => (i.severity === 'HIGH' || i.priority === 'Critical') && !isSolved(i.status)
+  ).length;
+  const mediumCount = issues.filter(
+    (i) => (i.severity === 'MEDIUM' || i.priority === 'Medium') && !isSolved(i.status)
   ).length;
   const pendingCount = issues.filter((i) => isPending(i.status)).length;
   const inProgressCount = issues.filter((i) => isInProgress(i.status)).length;
@@ -84,7 +87,7 @@ export const Header: React.FC<HeaderProps> = ({
             <p className="text-[11px] text-slate-400 flex items-center gap-1.5 tracking-tight">
               <span>Processes uploaded road footage from buses</span>
               <span className="text-slate-600">•</span>
-              <span className="text-cyan-400 font-mono">Bharuch Transit Network</span>
+              <span className="text-cyan-400 font-mono">Gujarat Transit Network (Bharuch • Vadodara)</span>
             </p>
           </div>
         </div>
@@ -224,8 +227,14 @@ export const Header: React.FC<HeaderProps> = ({
         <div className="flex items-center gap-2 sm:gap-3 text-xs font-mono flex-wrap">
           <div className="flex items-center gap-1.5" title="Critical/High Severity Unresolved Problems">
             <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping"></span>
-            <span className="text-slate-400">Critical/High:</span>
-            <span className="text-rose-400 font-bold">{highSeverityCount}</span>
+            <span className="text-slate-400">Critical / High:</span>
+            <span className="text-rose-400 font-bold">{criticalHighCount}</span>
+          </div>
+          <span className="text-slate-700">|</span>
+          <div className="flex items-center gap-1.5" title="Medium Severity Unresolved Problems">
+            <span className="w-2 h-2 rounded-full bg-amber-400"></span>
+            <span className="text-slate-400">Medium:</span>
+            <span className="text-amber-300 font-bold">{mediumCount}</span>
           </div>
           <span className="text-slate-700">|</span>
           <div className="flex items-center gap-1.5" title="Problems with Pending status">
@@ -242,7 +251,7 @@ export const Header: React.FC<HeaderProps> = ({
           <span className="text-slate-700">|</span>
           <div className="flex items-center gap-1.5" title="Solved and Repaired Problems">
             <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-            <span className="text-slate-400">Solved:</span>
+            <span className="text-slate-400">Repaired / Solved:</span>
             <span className="text-emerald-400 font-semibold">{solvedCount}</span>
           </div>
         </div>

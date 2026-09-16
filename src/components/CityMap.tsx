@@ -173,6 +173,7 @@ export const CityMap: React.FC<CityMapProps> = ({
     const filteredIssues = issues.filter((issue) => {
       if (filterType !== 'ALL' && issue.type !== filterType) return false;
       if (filterSeverity !== 'ALL' && issue.severity !== filterSeverity) return false;
+      if (!issue.lat || !issue.lng || (issue.lat === 0 && issue.lng === 0)) return false;
       return true;
     });
 
@@ -381,14 +382,42 @@ export const CityMap: React.FC<CityMapProps> = ({
   // Center on Selected Issue
   useEffect(() => {
     if (!selectedIssue || !mapInstanceRef.current) return;
-    mapInstanceRef.current.panTo([selectedIssue.lat, selectedIssue.lng], {
-      animate: true,
-      duration: 0.8,
-    });
+    if (!selectedIssue.lat || !selectedIssue.lng || (selectedIssue.lat === 0 && selectedIssue.lng === 0)) return;
+    
+    const currentCenter = mapInstanceRef.current.getCenter();
+    const distLat = Math.abs(currentCenter.lat - selectedIssue.lat);
+    const distLng = Math.abs(currentCenter.lng - selectedIssue.lng);
+
+    // If switching cities (e.g. from Bharuch to Vadodara), use setView or flyTo
+    if (distLat > 0.1 || distLng > 0.1) {
+      mapInstanceRef.current.flyTo([selectedIssue.lat, selectedIssue.lng], 14, {
+        duration: 1.2,
+      });
+    } else {
+      mapInstanceRef.current.panTo([selectedIssue.lat, selectedIssue.lng], {
+        animate: true,
+        duration: 0.8,
+      });
+    }
   }, [selectedIssue]);
 
   const handleRecenter = () => {
     if (!mapInstanceRef.current) return;
+    if (selectedIssue && selectedIssue.lat && selectedIssue.lng && selectedIssue.lat !== 0) {
+      mapInstanceRef.current.setView([selectedIssue.lat, selectedIssue.lng], 14, {
+        animate: true,
+        duration: 0.8,
+      });
+      return;
+    }
+    const latestWithLoc = issues.find((i) => i.hasSelectedLocation && i.lat && i.lat !== 0);
+    if (latestWithLoc) {
+      mapInstanceRef.current.setView([latestWithLoc.lat, latestWithLoc.lng], 14, {
+        animate: true,
+        duration: 0.8,
+      });
+      return;
+    }
     mapInstanceRef.current.setView(DEFAULT_CENTER, DEFAULT_ZOOM, {
       animate: true,
       duration: 0.8,

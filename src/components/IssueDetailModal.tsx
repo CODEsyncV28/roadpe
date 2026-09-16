@@ -21,7 +21,11 @@ import {
   Maximize2,
   Route,
   ExternalLink,
-  Check
+  Check,
+  Send,
+  UserCheck,
+  Building2,
+  Play
 } from 'lucide-react';
 import { RoadIssue, WorkflowStatus, VerificationStatus, IssueType, Severity, BusFleet } from '../types';
 import { generateBusRouteForLocation, parseGoogleMapsInput, PRESET_GMAP_LANDMARKS } from '../utils/routeGenerator';
@@ -30,16 +34,18 @@ interface IssueDetailModalProps {
   issue: RoadIssue | null;
   onClose: () => void;
   onUpdateIssue: (updated: RoadIssue, generatedBus?: BusFleet) => void;
+  onOpenAssignModal?: (issue: RoadIssue) => void;
 }
 
 export const IssueDetailModal: React.FC<IssueDetailModalProps> = ({
   issue,
   onClose,
   onUpdateIssue,
+  onOpenAssignModal,
 }) => {
   if (!issue) return null;
 
-  const [activeTab, setActiveTab] = useState<'LAYER_1_AI' | 'LAYER_2_AUTHORITY' | 'LAYER_3_MAINTENANCE'>('LAYER_1_AI');
+  const [activeTab, setActiveTab] = useState<'AI_DETECTION' | 'AUTHORITY_VERIFICATION' | 'STATUS_TRACKING'>('AI_DETECTION');
   const [showBoundingBoxes, setShowBoundingBoxes] = useState(true);
 
   // Google Maps & Route generation state for this issue
@@ -208,7 +214,88 @@ export const IssueDetailModal: React.FC<IssueDetailModalProps> = ({
           </button>
         </div>
 
-        {/* Modal Body: Left Camera Frame + Right 3-Layer Management Tabs */}
+        {/* Linear Workflow Progress Stepper */}
+        <div className="bg-[#070c16] border-b border-slate-800/90 px-5 py-2.5">
+          <div className="flex items-center justify-between gap-2 overflow-x-auto scrollbar-none text-xs font-mono">
+            {/* Step 1: AI Detection */}
+            <div className="flex items-center gap-2 shrink-0">
+              <div className="w-6 h-6 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500 flex items-center justify-center font-bold text-[11px]">
+                ✓
+              </div>
+              <div>
+                <div className="font-bold text-slate-200 text-[11px]">1. AI Detection</div>
+                <div className="text-[10px] text-cyan-400 font-medium">{issue.confidence}% YOLOv8</div>
+              </div>
+            </div>
+
+            <div className="h-0.5 w-4 sm:w-8 bg-slate-800 shrink-0" />
+
+            {/* Step 2: Authority & Verification */}
+            <div className="flex items-center gap-2 shrink-0">
+              <div className={`w-6 h-6 rounded-full flex items-center justify-center font-bold text-[11px] border ${
+                issue.verification === 'Verified' || issue.verification === 'VERIFIED'
+                  ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500'
+                  : issue.verification === 'Rejected' || issue.verification === 'REJECTED'
+                  ? 'bg-rose-500/20 text-rose-300 border-rose-500'
+                  : 'bg-amber-500/20 text-amber-300 border-amber-500'
+              }`}>
+                {issue.verification === 'Verified' || issue.verification === 'VERIFIED' ? '✓' : '2'}
+              </div>
+              <div>
+                <div className="font-bold text-slate-200 text-[11px]">2. Authority &amp; Verification</div>
+                <div className="text-[10px] text-slate-400">
+                  {issue.verification === 'Verified' || issue.verification === 'VERIFIED'
+                    ? 'Verified'
+                    : issue.verification === 'Rejected' || issue.verification === 'REJECTED'
+                    ? 'Rejected'
+                    : 'Pending Review'}
+                </div>
+              </div>
+            </div>
+
+            <div className="h-0.5 w-4 sm:w-8 bg-slate-800 shrink-0" />
+
+            {/* Step 3: Assign Problem */}
+            <div className="flex items-center gap-2 shrink-0">
+              <div className={`w-6 h-6 rounded-full flex items-center justify-center font-bold text-[11px] border ${
+                issue.assignedAuthority
+                  ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500'
+                  : 'bg-slate-900 text-slate-400 border-slate-700'
+              }`}>
+                {issue.assignedAuthority ? '✓' : '3'}
+              </div>
+              <div>
+                <div className="font-bold text-slate-200 text-[11px]">3. Assign Problem</div>
+                <div className="text-[10px] text-slate-400 truncate max-w-[120px]">
+                  {issue.assignedAuthority || 'Unassigned'}
+                </div>
+              </div>
+            </div>
+
+            <div className="h-0.5 w-4 sm:w-8 bg-slate-800 shrink-0" />
+
+            {/* Step 4: Problem Status Tracking */}
+            <div className="flex items-center gap-2 shrink-0">
+              <div className={`w-6 h-6 rounded-full flex items-center justify-center font-bold text-[11px] border ${
+                issue.status === 'Solved' || issue.status === 'RESOLVED'
+                  ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500'
+                  : issue.status === 'In Progress' || issue.status === 'IN_PROGRESS' || issue.status === 'DISPATCHED'
+                  ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500 animate-pulse'
+                  : 'bg-amber-500/20 text-amber-300 border-amber-500'
+              }`}>
+                {issue.status === 'Solved' || issue.status === 'RESOLVED' ? '✓' : '4'}
+              </div>
+              <div>
+                <div className="font-bold text-slate-200 text-[11px]">4. Status Tracking</div>
+                <div className="text-[10px] font-semibold text-cyan-300">
+                  {issue.status}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Modal Body: Left Camera Frame + Right Management Tabs */}
         <div className="flex-1 overflow-y-auto grid grid-cols-1 lg:grid-cols-12">
           
           {/* Left Column: Bus Camera Captured Evidence Frame (5/12 cols) */}
@@ -409,45 +496,45 @@ export const IssueDetailModal: React.FC<IssueDetailModalProps> = ({
           {/* Right Column: The 3 Functional Layers (7/12 cols) */}
           <div className="lg:col-span-7 p-4 bg-[#090e1a] flex flex-col">
             
-            {/* Layer Tabs Header */}
+            {/* Tabs Header */}
             <div className="flex items-center gap-1 p-1 bg-slate-950 rounded-lg border border-slate-800 mb-4 text-xs font-mono">
               <button
-                id="modal-tab-layer1"
-                onClick={() => setActiveTab('LAYER_1_AI')}
+                id="modal-tab-ai"
+                onClick={() => setActiveTab('AI_DETECTION')}
                 className={`flex-1 py-1.5 px-2 rounded font-semibold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                  activeTab === 'LAYER_1_AI'
+                  activeTab === 'AI_DETECTION'
                     ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/50 shadow-sm'
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
                 <Cpu className="w-3.5 h-3.5" />
-                <span>Layer 1: AI Engine</span>
+                <span>AI Detection</span>
               </button>
 
               <button
-                id="modal-tab-layer2"
-                onClick={() => setActiveTab('LAYER_2_AUTHORITY')}
+                id="modal-tab-authority"
+                onClick={() => setActiveTab('AUTHORITY_VERIFICATION')}
                 className={`flex-1 py-1.5 px-2 rounded font-semibold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                  activeTab === 'LAYER_2_AUTHORITY'
+                  activeTab === 'AUTHORITY_VERIFICATION'
                     ? 'bg-amber-500/20 text-amber-300 border border-amber-500/50 shadow-sm'
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
                 <ShieldCheck className="w-3.5 h-3.5" />
-                <span>Layer 2: Authority</span>
+                <span>Authority &amp; Verification</span>
               </button>
 
               <button
-                id="modal-tab-layer3"
-                onClick={() => setActiveTab('LAYER_3_MAINTENANCE')}
+                id="modal-tab-tracking"
+                onClick={() => setActiveTab('STATUS_TRACKING')}
                 className={`flex-1 py-1.5 px-2 rounded font-semibold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                  activeTab === 'LAYER_3_MAINTENANCE'
+                  activeTab === 'STATUS_TRACKING'
                     ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/50 shadow-sm'
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
                 <Wrench className="w-3.5 h-3.5" />
-                <span>Layer 3: Maintenance</span>
+                <span>Problem Status &amp; Tracking</span>
               </button>
             </div>
 
@@ -459,8 +546,8 @@ export const IssueDetailModal: React.FC<IssueDetailModalProps> = ({
               </div>
             )}
 
-            {/* TAB CONTENT: LAYER 1 — AI LAYER (Automated, Read-Mostly) */}
-            {activeTab === 'LAYER_1_AI' && (
+            {/* TAB CONTENT: AI DETECTION */}
+            {activeTab === 'AI_DETECTION' && (
               <div className="space-y-3.5 text-xs font-mono">
                 <div className="p-3 rounded-lg bg-slate-950 border border-slate-800">
                   <div className="flex items-center justify-between mb-2">
@@ -697,10 +784,35 @@ export const IssueDetailModal: React.FC<IssueDetailModalProps> = ({
               </div>
             )}
 
-            {/* TAB CONTENT: LAYER 2 — AUTHORITY LAYER (Municipal Staff Actions) */}
-            {activeTab === 'LAYER_2_AUTHORITY' && (
+            {/* TAB CONTENT: AUTHORITY & VERIFICATION */}
+            {activeTab === 'AUTHORITY_VERIFICATION' && (
               <div className="space-y-3.5 text-xs font-mono">
                 
+                {/* Assign Problem Banner */}
+                <div className="p-3 rounded-lg bg-indigo-950/40 border border-indigo-500/50 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5">
+                  <div>
+                    <span className="text-slate-200 font-bold block text-[11px] flex items-center gap-1.5">
+                      <Building2 className="w-3.5 h-3.5 text-indigo-400" />
+                      <span>Assign Problem to Municipal Department</span>
+                    </span>
+                    <span className="text-[10px] text-slate-400 block mt-0.5">
+                      {issue.assignedAuthority
+                        ? `Currently assigned to ${issue.assignedAuthority}${issue.assignedPerson ? ` (${issue.assignedPerson})` : ''}`
+                        : 'Not yet assigned to any maintenance crew'}
+                    </span>
+                  </div>
+                  {onOpenAssignModal && (
+                    <button
+                      type="button"
+                      onClick={() => onOpenAssignModal(issue)}
+                      className="px-3.5 py-1.5 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 shadow-md shadow-cyan-500/20 transition-all cursor-pointer shrink-0"
+                    >
+                      <Send className="w-3.5 h-3.5" />
+                      <span>{issue.assignedAuthority ? 'Reassign Problem' : 'Assign Problem'}</span>
+                    </button>
+                  )}
+                </div>
+
                 {/* Verification Status */}
                 <div className="p-3 rounded-lg bg-slate-950 border border-slate-800 space-y-2">
                   <label className="text-slate-300 font-bold block">
@@ -836,32 +948,42 @@ export const IssueDetailModal: React.FC<IssueDetailModalProps> = ({
               </div>
             )}
 
-            {/* TAB CONTENT: LAYER 3 — MAINTENANCE LAYER (Repair Workflow) */}
-            {activeTab === 'LAYER_3_MAINTENANCE' && (
+            {/* TAB CONTENT: PROBLEM STATUS & TRACKING */}
+            {activeTab === 'STATUS_TRACKING' && (
               <div className="space-y-3.5 text-xs font-mono">
                 
                 {/* Workflow Status Progression */}
                 <div className="p-3 rounded-lg bg-slate-950 border border-slate-800 space-y-2">
                   <label className="text-slate-300 font-bold block">
-                    1. Maintenance Workflow Progression:
+                    1. Problem Status Tracking Progression:
                   </label>
-                  <div className="grid grid-cols-4 gap-1.5 text-[11px]">
-                    {(['PENDING', 'DISPATCHED', 'IN_PROGRESS', 'RESOLVED'] as WorkflowStatus[]).map((st) => (
-                      <button
-                        key={st}
-                        type="button"
-                        onClick={() => setStatus(st)}
-                        className={`p-1.5 rounded border transition-colors cursor-pointer text-center ${
-                          status === st
-                            ? st === 'RESOLVED'
-                              ? 'bg-emerald-500/20 border-emerald-400 text-emerald-300 font-bold'
-                              : 'bg-cyan-500/20 border-cyan-400 text-cyan-200 font-bold'
-                            : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
-                        }`}
-                      >
-                        {st.replace('_', ' ')}
-                      </button>
-                    ))}
+                  <div className="grid grid-cols-3 gap-2 text-xs">
+                    {[
+                      { key: 'PENDING', label: '⏳ Pending', color: 'border-amber-500 text-amber-300' },
+                      { key: 'IN_PROGRESS', label: '⚡ In Progress', color: 'border-cyan-500 text-cyan-300' },
+                      { key: 'RESOLVED', label: '✓ Solved', color: 'border-emerald-500 text-emerald-300' },
+                    ].map((st) => {
+                      const isSelected = 
+                        status === st.key ||
+                        (st.key === 'PENDING' && (status === 'Pending' || status === 'PENDING')) ||
+                        (st.key === 'IN_PROGRESS' && (status === 'In Progress' || status === 'IN_PROGRESS' || status === 'DISPATCHED')) ||
+                        (st.key === 'RESOLVED' && (status === 'Solved' || status === 'RESOLVED'));
+
+                      return (
+                        <button
+                          key={st.key}
+                          type="button"
+                          onClick={() => setStatus(st.key as WorkflowStatus)}
+                          className={`p-2 rounded-lg border transition-all cursor-pointer text-center font-bold ${
+                            isSelected
+                              ? `bg-slate-900 ${st.color} shadow-sm ring-1 ring-cyan-500/50`
+                              : 'bg-slate-900/60 border-slate-800 text-slate-400 hover:text-slate-200'
+                          }`}
+                        >
+                          {st.label}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
 

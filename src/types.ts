@@ -16,11 +16,13 @@ export type WorkflowStatus =
   | 'In Progress' 
   | 'Solved' 
   | 'Rejected'
+  | 'Closed'
   | 'PENDING' 
   | 'DISPATCHED' 
   | 'IN_PROGRESS' 
   | 'RESOLVED' 
-  | 'REJECTED';
+  | 'REJECTED'
+  | 'CLOSED';
 
 export type VerificationStatus = 
   | 'Pending Verification' 
@@ -29,10 +31,13 @@ export type VerificationStatus =
   | 'AI_DETECTED' 
   | 'VERIFIED' 
   | 'FALSE_POSITIVE' 
-  | 'AUTHORITY_OVERRIDE';
+  | 'AUTHORITY_OVERRIDE'
+  | 'Verified by Staff'
+  | 'False Positive'
+  | 'Authority Override';
 
 export interface WorkflowHistoryEntry {
-  stage: 'Detected' | 'Verified' | 'Rejected' | 'Assigned' | 'In Progress' | 'Solved';
+  stage: 'Detected' | 'Verified' | 'Rejected' | 'Assigned' | 'In Progress' | 'Solved' | 'False Positive' | 'Closed' | 'Override' | string;
   timestamp: string;
   author?: string;
   note?: string;
@@ -86,6 +91,18 @@ export interface GeneratedBusRoute {
   description: string;
 }
 
+export interface DetailedLocation {
+  latitude: number;
+  longitude: number;
+  city?: string;
+  district?: string;
+  state?: string;
+  country?: string;
+  postalCode?: string;
+  formattedAddress?: string;
+  address?: string;
+}
+
 export interface RoadIssue {
   id: string;
   type: IssueType;
@@ -93,6 +110,8 @@ export interface RoadIssue {
   locationName: string;
   lat: number;
   lng: number;
+  location?: DetailedLocation;
+  hasSelectedLocation?: boolean;
   severity: Severity;
   confidence: number;
   busId: string;
@@ -132,6 +151,32 @@ export interface RoadIssue {
   dueDate?: string;
   notes?: string;
   workflowHistory?: WorkflowHistoryEntry[];
+  // Original AI Preservation (Never overwritten)
+  originalAI?: {
+    type: IssueType;
+    confidence: number;
+    severity: Severity;
+    locationName: string;
+    lat: number;
+    lng: number;
+    timestamp: string;
+    evidenceImage?: string;
+  };
+  // Authority Override Audit Record
+  authorityOverride?: {
+    originalType: IssueType;
+    newType: IssueType;
+    originalSeverity: Severity;
+    newSeverity: Severity;
+    authority: string;
+    reason: string;
+    timestamp: string;
+    roadClosureActive?: boolean;
+    speedLimitKmh?: number;
+  };
+  // Verification and False Positive Audit Data
+  verificationNotes?: string;
+  falsePositiveReason?: string;
   // Authority Layer
   authorityNotes?: string;
   verifiedBy?: string;

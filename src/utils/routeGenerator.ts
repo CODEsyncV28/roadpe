@@ -1,4 +1,4 @@
-import { GeneratedBusRoute, RouteWaypoint, BusFleet } from '../types';
+import { GeneratedBusRoute, RouteWaypoint, BusFleet, DetailedLocation } from '../types';
 
 export interface ParsedGoogleMapsLocation {
   lat: number;
@@ -6,8 +6,14 @@ export interface ParsedGoogleMapsLocation {
   isValid: boolean;
   name: string;
   formattedCoordinates: string;
-  sourceType: 'URL_QUERY' | 'URL_COORDINATE_PATH' | 'COORDINATE_TEXT' | 'LANDMARK_MATCH' | 'FALLBACK';
+  sourceType: 'URL_QUERY' | 'URL_COORDINATE_PATH' | 'COORDINATE_TEXT' | 'LANDMARK_MATCH' | 'CITY_MATCH' | 'MAP_CLICK' | 'REVERSE_GEOCODED' | 'GEOCODE_API' | 'LANDMARK_PRESET' | 'FALLBACK';
   googleMapsUrl: string;
+  city?: string;
+  district?: string;
+  state?: string;
+  country?: string;
+  address?: string;
+  formattedAddress?: string;
 }
 
 export interface PresetGMapLandmark {
@@ -18,10 +24,59 @@ export interface PresetGMapLandmark {
   lng: number;
   address: string;
   corridor: string;
+  city: string;
+  state: string;
 }
 
-// Key landmarks across Bharuch Urban & Industrial transit network
+// Key transit hubs and urban landmarks across Gujarat transit corridors
 export const PRESET_GMAP_LANDMARKS: PresetGMapLandmark[] = [
+  // Vadodara
+  {
+    id: 'vadodara-station',
+    name: 'Vadodara Central Railway Station & Sayajigunj',
+    category: 'Transit Hub',
+    lat: 22.3107,
+    lng: 73.1812,
+    address: 'Station Road, Sayajigunj, Vadodara, Gujarat 390005',
+    corridor: 'Vadodara Central Commuter Corridor',
+    city: 'Vadodara',
+    state: 'Gujarat',
+  },
+  {
+    id: 'vadodara-alkapuri',
+    name: 'Alkapuri RC Dutt Road Commercial Hub, Vadodara',
+    category: 'Commercial Center',
+    lat: 22.3128,
+    lng: 73.1702,
+    address: 'RC Dutt Road, Alkapuri, Vadodara, Gujarat 390007',
+    corridor: 'Alkapuri Express Arterial',
+    city: 'Vadodara',
+    state: 'Gujarat',
+  },
+  {
+    id: 'vadodara-makarpura',
+    name: 'Makarpura GIDC Industrial Corridor, Vadodara',
+    category: 'Industrial',
+    lat: 22.2548,
+    lng: 73.1956,
+    address: 'Makarpura Main Road, GIDC, Vadodara 390010',
+    corridor: 'Makarpura Industrial Freight Transit',
+    city: 'Vadodara',
+    state: 'Gujarat',
+  },
+  {
+    id: 'vadodara-akota',
+    name: 'Akota - Dandia Bazar Bridge Road, Vadodara',
+    category: 'Arterial Link',
+    lat: 22.2982,
+    lng: 73.1755,
+    address: 'Akota Stadium Road, Vadodara, Gujarat 390020',
+    corridor: 'Akota Riverfront Link',
+    city: 'Vadodara',
+    state: 'Gujarat',
+  },
+
+  // Bharuch
   {
     id: 'station-hub',
     name: 'Bharuch Central ST Bus Stand & Station Road',
@@ -30,6 +85,8 @@ export const PRESET_GMAP_LANDMARKS: PresetGMapLandmark[] = [
     lng: 72.9860,
     address: 'Station Road, Old Bharuch City, Gujarat 392001',
     corridor: 'Central Transit Corridor',
+    city: 'Bharuch',
+    state: 'Gujarat',
   },
   {
     id: 'kasak-circle',
@@ -39,6 +96,8 @@ export const PRESET_GMAP_LANDMARKS: PresetGMapLandmark[] = [
     lng: 72.9925,
     address: 'Kasak Main Road, Near Civil Hospital, Bharuch',
     corridor: 'South-Central Arterial',
+    city: 'Bharuch',
+    state: 'Gujarat',
   },
   {
     id: 'zadeshwar-chowkdi',
@@ -48,6 +107,8 @@ export const PRESET_GMAP_LANDMARKS: PresetGMapLandmark[] = [
     lng: 73.0120,
     address: 'NH-48 Golden Quadrilateral Intersection, Zadeshwar',
     corridor: 'Highway Express Corridor',
+    city: 'Bharuch',
+    state: 'Gujarat',
   },
   {
     id: 'gnfc-complex',
@@ -57,6 +118,8 @@ export const PRESET_GMAP_LANDMARKS: PresetGMapLandmark[] = [
     lng: 73.0080,
     address: 'GNFC Industrial Area, Narmadanagar, Bharuch',
     corridor: 'Industrial Heavy Freight Zone',
+    city: 'Bharuch',
+    state: 'Gujarat',
   },
   {
     id: 'bholav-circle',
@@ -66,42 +129,45 @@ export const PRESET_GMAP_LANDMARKS: PresetGMapLandmark[] = [
     lng: 72.9920,
     address: 'Bholav Ring Road, Bharuch 392002',
     corridor: 'Bholav Commuter Loop',
+    city: 'Bharuch',
+    state: 'Gujarat',
+  },
+
+  // Ahmedabad
+  {
+    id: 'ahmedabad-kalupur',
+    name: 'Ahmedabad Kalupur Central Station Cross',
+    category: 'Transit Hub',
+    lat: 23.0225,
+    lng: 72.5714,
+    address: 'Railway Station Road, Kalupur, Ahmedabad, Gujarat 380002',
+    corridor: 'Ahmedabad East-West Metro Arterial',
+    city: 'Ahmedabad',
+    state: 'Gujarat',
   },
   {
-    id: 'dahej-bypass',
-    name: 'Dahej Bypass Heavy Vehicle Overbridge',
-    category: 'Freight Corridor',
-    lat: 21.6850,
-    lng: 72.9650,
-    address: 'Dahej State Highway 6, Western Bypass',
-    corridor: 'Port & Industrial Transit Link',
+    id: 'ahmedabad-sg-highway',
+    name: 'SG Highway & Iscon Crossroad, Ahmedabad',
+    category: 'Highway Link',
+    lat: 23.0276,
+    lng: 72.5065,
+    address: 'Sarkhej - Gandhinagar Hwy, Ahmedabad 380054',
+    corridor: 'SG Highway Rapid Transit',
+    city: 'Ahmedabad',
+    state: 'Gujarat',
   },
+
+  // Surat
   {
-    id: 'golden-bridge',
-    name: 'Historic Golden Bridge Narmada Overpass',
-    category: 'Bridge / Riverway',
-    lat: 21.6880,
-    lng: 72.9820,
-    address: 'Narmada Riverfront Old Crossing, Bharuch',
-    corridor: 'River Cross Connection',
-  },
-  {
-    id: 'shaktinath-circle',
-    name: 'Shaktinath Circle / Education Campus',
-    category: 'Civic Center',
-    lat: 21.7115,
-    lng: 72.9980,
-    address: 'Shaktinath Main Avenue, Bharuch',
-    corridor: 'Civic Core Arterial',
-  },
-  {
-    id: 'gidc-phase-2',
-    name: 'GIDC Industrial Estate Phase 2 Chemical Zone',
-    category: 'Industrial',
-    lat: 21.7280,
-    lng: 73.0060,
-    address: 'GIDC Road No. 4, Ankleshwar-Bharuch Belt',
-    corridor: 'Manufacturing Corridor',
+    id: 'surat-station',
+    name: 'Surat Railway Station Ring Road Cross',
+    category: 'Transit Hub',
+    lat: 21.2048,
+    lng: 72.8409,
+    address: 'Station Road, Varachha, Surat, Gujarat 395003',
+    corridor: 'Surat Diamond Corridor',
+    city: 'Surat',
+    state: 'Gujarat',
   },
 ];
 
@@ -131,91 +197,173 @@ export function generateGoogleMapsUrl(lat: number, lng: number): string {
 }
 
 /**
+ * Helper to determine city & state by coordinate proximity for Indian regions
+ */
+export function resolveCityFromCoordinates(lat: number, lng: number): { city: string; state: string; name: string } {
+  if (lat >= 22.15 && lat <= 22.45 && lng >= 73.05 && lng <= 73.35) {
+    return { city: 'Vadodara', state: 'Gujarat', name: 'Vadodara, Gujarat' };
+  }
+  if (lat >= 21.60 && lat <= 21.80 && lng >= 72.85 && lng <= 73.15) {
+    return { city: 'Bharuch', state: 'Gujarat', name: 'Bharuch, Gujarat' };
+  }
+  if (lat >= 22.90 && lat <= 23.25 && lng >= 72.40 && lng <= 72.80) {
+    return { city: 'Ahmedabad', state: 'Gujarat', name: 'Ahmedabad, Gujarat' };
+  }
+  if (lat >= 21.05 && lat <= 21.30 && lng >= 72.70 && lng <= 73.00) {
+    return { city: 'Surat', state: 'Gujarat', name: 'Surat, Gujarat' };
+  }
+  if (lat >= 21.55 && lat <= 21.68 && lng >= 72.95 && lng <= 73.08) {
+    return { city: 'Ankleshwar', state: 'Gujarat', name: 'Ankleshwar, Gujarat' };
+  }
+  if (lat >= 23.15 && lat <= 23.35 && lng >= 72.55 && lng <= 72.75) {
+    return { city: 'Gandhinagar', state: 'Gujarat', name: 'Gandhinagar, Gujarat' };
+  }
+  if (lat >= 22.15 && lat <= 22.40 && lng >= 70.65 && lng <= 70.95) {
+    return { city: 'Rajkot', state: 'Gujarat', name: 'Rajkot, Gujarat' };
+  }
+  return { city: 'Urban Sector', state: 'Gujarat', name: `${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E` };
+}
+
+/**
  * Robust Google Maps input parser:
  * Parses:
- * 1. Coordinates: "21.7085, 72.9860" or "21.7085 72.9860"
- * 2. URL with ?q=lat,lng: https://maps.google.com/?q=21.7085,72.9860
- * 3. URL with @lat,lng,zoom: https://www.google.com/maps/@21.7085,72.9860,17z
- * 4. URL with /place/Name/@lat,lng: https://www.google.com/maps/place/Bharuch/@21.7085,72.9860
- * 5. Landmark names: "Kasak Circle", "GNFC", etc.
+ * 1. Coordinates: "22.3072, 73.1812" or "22.3072 73.1812"
+ * 2. URL with ?q=lat,lng: https://maps.google.com/?q=22.3072,73.1812
+ * 3. URL with @lat,lng,zoom: https://www.google.com/maps/@22.3072,73.1812,17z
+ * 4. URL with /place/Name/@lat,lng: https://www.google.com/maps/place/Vadodara/@22.3072,73.1812
+ * 5. City names: "Vadodara", "Bharuch", "Ahmedabad", etc.
+ * 6. Landmark names: "Alkapuri", "Kasak Circle", etc.
  */
 export function parseGoogleMapsInput(input: string): ParsedGoogleMapsLocation {
   const trimmed = input.trim();
 
   if (!trimmed) {
-    const fallback = PRESET_GMAP_LANDMARKS[0];
     return {
-      lat: fallback.lat,
-      lng: fallback.lng,
+      lat: 0,
+      lng: 0,
       isValid: false,
-      name: fallback.name,
-      formattedCoordinates: `${fallback.lat.toFixed(4)}°N, ${fallback.lng.toFixed(4)}°E`,
+      name: 'Location not selected',
+      formattedCoordinates: 'None',
       sourceType: 'FALLBACK',
-      googleMapsUrl: generateGoogleMapsUrl(fallback.lat, fallback.lng),
+      googleMapsUrl: '',
+      city: '',
+      state: '',
+      country: '',
+      address: '',
+      formattedAddress: '',
     };
   }
 
-  // 1. Check for @lat,lng in URL (standard Google Maps web url)
+  // 1. Check for city keywords first if direct text input
+  const lower = trimmed.toLowerCase();
+  const citiesMap: Record<string, { lat: number; lng: number; city: string; state: string; name: string }> = {
+    vadodara: { lat: 22.3072, lng: 73.1812, city: 'Vadodara', state: 'Gujarat', name: 'Vadodara, Gujarat' },
+    baroda: { lat: 22.3072, lng: 73.1812, city: 'Vadodara', state: 'Gujarat', name: 'Vadodara, Gujarat' },
+    bharuch: { lat: 21.7085, lng: 72.9860, city: 'Bharuch', state: 'Gujarat', name: 'Bharuch, Gujarat' },
+    ahmedabad: { lat: 23.0225, lng: 72.5714, city: 'Ahmedabad', state: 'Gujarat', name: 'Ahmedabad, Gujarat' },
+    surat: { lat: 21.1702, lng: 72.8311, city: 'Surat', state: 'Gujarat', name: 'Surat, Gujarat' },
+    ankleshwar: { lat: 21.6264, lng: 73.0034, city: 'Ankleshwar', state: 'Gujarat', name: 'Ankleshwar, Gujarat' },
+    gandhinagar: { lat: 23.2156, lng: 72.6369, city: 'Gandhinagar', state: 'Gujarat', name: 'Gandhinagar, Gujarat' },
+    rajkot: { lat: 22.3039, lng: 70.8022, city: 'Rajkot', state: 'Gujarat', name: 'Rajkot, Gujarat' },
+  };
+
+  for (const [key, info] of Object.entries(citiesMap)) {
+    if (lower === key || lower.startsWith(`${key},`) || lower.includes(`${key} city`) || lower.includes(`${key}, gujarat`)) {
+      return {
+        lat: info.lat,
+        lng: info.lng,
+        isValid: true,
+        name: info.name,
+        formattedCoordinates: `${info.lat.toFixed(5)}°N, ${info.lng.toFixed(5)}°E`,
+        sourceType: 'CITY_MATCH',
+        googleMapsUrl: generateGoogleMapsUrl(info.lat, info.lng),
+        city: info.city,
+        state: info.state,
+        country: 'India',
+        address: info.name,
+        formattedAddress: `${info.name}, India`,
+      };
+    }
+  }
+
+  // 2. Check for @lat,lng in URL (standard Google Maps web url)
   const atMatch = trimmed.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
   if (atMatch) {
     const lat = parseFloat(atMatch[1]);
     const lng = parseFloat(atMatch[2]);
-    // Extract place name if present in URL path
     let placeName = 'Attached Google Maps Location';
     const placeMatch = trimmed.match(/\/place\/([^/@]+)/);
     if (placeMatch && placeMatch[1]) {
       placeName = decodeURIComponent(placeMatch[1].replace(/\+/g, ' '));
     }
+    const resolved = resolveCityFromCoordinates(lat, lng);
 
     return {
       lat,
       lng,
       isValid: true,
-      name: placeName,
+      name: placeName !== 'Attached Google Maps Location' ? `${placeName}, ${resolved.city}` : resolved.name,
       formattedCoordinates: `${lat.toFixed(5)}°N, ${lng.toFixed(5)}°E`,
       sourceType: 'URL_COORDINATE_PATH',
       googleMapsUrl: generateGoogleMapsUrl(lat, lng),
+      city: resolved.city,
+      state: resolved.state,
+      country: 'India',
+      address: placeName,
+      formattedAddress: `${placeName}, ${resolved.name}`,
     };
   }
 
-  // 2. Check for ?q=lat,lng or query=lat,lng
-  const qMatch = trimmed.match(/[?&](?:q|query)=(-?\d+\.\d+)(?:,|%2C)(-?\d+\.\d+)/i);
+  // 3. Check for ?q=lat,lng or query=lat,lng or ll=lat,lng
+  const qMatch = trimmed.match(/[?&](?:q|query|ll)=(-?\d+\.\d+)(?:,|%2C)(-?\d+\.\d+)/i);
   if (qMatch) {
     const lat = parseFloat(qMatch[1]);
     const lng = parseFloat(qMatch[2]);
+    const resolved = resolveCityFromCoordinates(lat, lng);
     return {
       lat,
       lng,
       isValid: true,
-      name: 'Google Maps Pinned Coordinate',
+      name: resolved.name,
       formattedCoordinates: `${lat.toFixed(5)}°N, ${lng.toFixed(5)}°E`,
       sourceType: 'URL_QUERY',
       googleMapsUrl: generateGoogleMapsUrl(lat, lng),
+      city: resolved.city,
+      state: resolved.state,
+      country: 'India',
+      address: resolved.name,
+      formattedAddress: `${resolved.name}, India`,
     };
   }
 
-  // 3. Check for direct coordinates "lat, lng" or "lat lng"
+  // 4. Check for direct coordinates "lat, lng" or "lat lng"
   const directCoordMatch = trimmed.match(/^(-?\d+\.\d+)[,\s]+(-?\d+\.\d+)$/);
   if (directCoordMatch) {
     const lat = parseFloat(directCoordMatch[1]);
     const lng = parseFloat(directCoordMatch[2]);
+    const resolved = resolveCityFromCoordinates(lat, lng);
     return {
       lat,
       lng,
       isValid: true,
-      name: `GPS Point (${lat.toFixed(4)}, ${lng.toFixed(4)})`,
+      name: resolved.name,
       formattedCoordinates: `${lat.toFixed(5)}°N, ${lng.toFixed(5)}°E`,
       sourceType: 'COORDINATE_TEXT',
       googleMapsUrl: generateGoogleMapsUrl(lat, lng),
+      city: resolved.city,
+      state: resolved.state,
+      country: 'India',
+      address: resolved.name,
+      formattedAddress: `${resolved.name}, India`,
     };
   }
 
-  // 4. Check for landmark fuzzy match in Bharuch presets
-  const lower = trimmed.toLowerCase();
+  // 5. Check for landmark match in presets
   const matchedLandmark = PRESET_GMAP_LANDMARKS.find((lm) =>
     lm.name.toLowerCase().includes(lower) ||
     lm.category.toLowerCase().includes(lower) ||
     lm.corridor.toLowerCase().includes(lower) ||
+    lm.address.toLowerCase().includes(lower) ||
     lm.id.toLowerCase().includes(lower)
   );
 
@@ -228,41 +376,57 @@ export function parseGoogleMapsInput(input: string): ParsedGoogleMapsLocation {
       formattedCoordinates: `${matchedLandmark.lat.toFixed(5)}°N, ${matchedLandmark.lng.toFixed(5)}°E`,
       sourceType: 'LANDMARK_MATCH',
       googleMapsUrl: generateGoogleMapsUrl(matchedLandmark.lat, matchedLandmark.lng),
+      city: matchedLandmark.city,
+      state: matchedLandmark.state,
+      country: 'India',
+      address: matchedLandmark.address,
+      formattedAddress: matchedLandmark.address,
     };
   }
 
-  // 5. If it looks like a URL but coordinates weren't parsed (e.g. goo.gl shortlink)
-  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
-    // Provide a smart anchor inside Bharuch central area
-    const defaultAnchor = PRESET_GMAP_LANDMARKS[1];
-    return {
-      lat: defaultAnchor.lat,
-      lng: defaultAnchor.lng,
-      isValid: true,
-      name: 'Google Maps Link Location (Bharuch Sector)',
-      formattedCoordinates: `${defaultAnchor.lat.toFixed(5)}°N, ${defaultAnchor.lng.toFixed(5)}°E`,
-      sourceType: 'URL_QUERY',
-      googleMapsUrl: trimmed,
-    };
+  // 6. Check for URL with query text (e.g. maps.google.com/?q=Vadodara)
+  if (trimmed.includes('q=') || trimmed.includes('/place/')) {
+    for (const [key, info] of Object.entries(citiesMap)) {
+      if (lower.includes(key)) {
+        return {
+          lat: info.lat,
+          lng: info.lng,
+          isValid: true,
+          name: info.name,
+          formattedCoordinates: `${info.lat.toFixed(5)}°N, ${info.lng.toFixed(5)}°E`,
+          sourceType: 'URL_QUERY',
+          googleMapsUrl: generateGoogleMapsUrl(info.lat, info.lng),
+          city: info.city,
+          state: info.state,
+          country: 'India',
+          address: info.name,
+          formattedAddress: `${info.name}, India`,
+        };
+      }
+    }
   }
 
-  // Fallback to Station Hub
-  const fallback = PRESET_GMAP_LANDMARKS[0];
+  // If text doesn't match and coordinates are not found
   return {
-    lat: fallback.lat,
-    lng: fallback.lng,
+    lat: 0,
+    lng: 0,
     isValid: false,
-    name: trimmed || fallback.name,
-    formattedCoordinates: `${fallback.lat.toFixed(5)}°N, ${fallback.lng.toFixed(5)}°E`,
+    name: 'Location not selected',
+    formattedCoordinates: 'None',
     sourceType: 'FALLBACK',
-    googleMapsUrl: generateGoogleMapsUrl(fallback.lat, fallback.lng),
+    googleMapsUrl: '',
+    city: '',
+    state: '',
+    country: '',
+    address: '',
+    formattedAddress: '',
   };
 }
 
 /**
  * Route Generator Engine
  * Given a target Google Maps location, generates an optimized bus survey route
- * connecting municipal depots, navigating through major transit corridors,
+ * connecting local municipal depots, navigating through major transit corridors,
  * and performing a dedicated inspection stop at the target coordinates.
  */
 export function generateBusRouteForLocation(
@@ -282,21 +446,23 @@ export function generateBusRouteForLocation(
   const busNumber = options?.busNumber || 'GJ-16-Z-9905';
   const routeId = `RT-INSP-${Math.floor(100 + Math.random() * 900)}`;
 
-  // Hub 1: Bharuch Central Bus Stand / Railway Station
+  // Create local waypoints centered strictly around the target coordinates
+  const deltaLat = 0.008;
+  const deltaLng = 0.006;
+
+  // Local Depot Start (South-West of target)
   const depotStart = {
-    name: 'Bharuch Central Transit Terminal (Depot Alpha)',
-    lat: 21.7085,
-    lng: 72.9860,
-    instruction: 'Depart Central Depot; initiate onboard edge AI survey cameras',
+    name: `Local Municipal Transit Hub (${locationName.split(',')[0]} Sector)`,
+    lat: targetLat - deltaLat,
+    lng: targetLng - deltaLng,
+    instruction: 'Depart local transit depot; initiate onboard edge AI survey cameras',
   };
 
-  // Intermediate node 1: Interpolated toward target
-  const midLat1 = depotStart.lat + (targetLat - depotStart.lat) * 0.45;
-  const midLng1 = depotStart.lng + (targetLng - depotStart.lng) * 0.52;
+  // Approach waypoint
   const approachNode = {
-    name: `Arterial Corridor Approach via ${getCorridorNameForCoords(midLat1, midLng1)}`,
-    lat: midLat1,
-    lng: midLng1,
+    name: `Transit Corridor Approach (Toward Survey Point)`,
+    lat: targetLat - deltaLat * 0.45,
+    lng: targetLng - deltaLng * 0.25,
     instruction: 'Transit corridor waypoint; adjust camera exposure to ambient light',
   };
 
@@ -310,21 +476,20 @@ export function generateBusRouteForLocation(
     dwellTimeSec: 180,
   };
 
-  // Intermediate node 2: Loop / Exit toward return terminal
-  const depotEnd = {
-    name: 'Municipal Fleet Maintenance Terminal (East Yard)',
-    lat: 21.7190,
-    lng: 72.9880,
-    instruction: 'Complete inspection loop; upload final edge telemetry packet',
+  // Exit corridor
+  const exitNode = {
+    name: `Survey Loop Exit (North-East Arterial)`,
+    lat: targetLat + deltaLat * 0.45,
+    lng: targetLng + deltaLng * 0.35,
+    instruction: 'Turn onto arterial bypass; continue continuous road health monitoring',
   };
 
-  const midLat2 = targetLat + (depotEnd.lat - targetLat) * 0.55;
-  const midLng2 = targetLng + (depotEnd.lng - targetLng) * 0.48;
-  const exitNode = {
-    name: `Return Link via ${getCorridorNameForCoords(midLat2, midLng2)}`,
-    lat: midLat2,
-    lng: midLng2,
-    instruction: 'Turn onto arterial bypass; continue continuous road health monitoring',
+  // Return Terminal
+  const depotEnd = {
+    name: `Municipal Fleet Maintenance Hub (${locationName.split(',')[0]} East)`,
+    lat: targetLat + deltaLat * 0.8,
+    lng: targetLng - deltaLng * 0.5,
+    instruction: 'Complete inspection loop; upload final edge telemetry packet',
   };
 
   // Assemble waypoints
@@ -347,7 +512,7 @@ export function generateBusRouteForLocation(
     for (let s = 0; s < steps; s++) {
       const t = s / steps;
       // Add slight road curvature offset
-      const curveOffset = Math.sin(t * Math.PI) * 0.0012 * (i % 2 === 0 ? 1 : -1);
+      const curveOffset = Math.sin(t * Math.PI) * 0.0008 * (i % 2 === 0 ? 1 : -1);
       const lat = p1.lat + (p2.lat - p1.lat) * t + curveOffset;
       const lng = p1.lng + (p2.lng - p1.lng) * t + curveOffset * 0.7;
       routeCoordinates.push([lat, lng]);
@@ -371,11 +536,11 @@ export function generateBusRouteForLocation(
 
   // Urban bus speed average 26 km/h + dwell times
   const driveMinutes = (totalKm / 26) * 60;
-  const dwellMinutes = (60 + 180 + 120) / 60; // 6 mins total dwell
+  const dwellMinutes = (60 + 180 + 120) / 60;
   const estimatedDurationMin = Math.round(driveMinutes + dwellMinutes);
 
   const cleanLocationShortName = locationName.length > 32 ? locationName.slice(0, 32) + '...' : locationName;
-  const routeName = options?.routeName || `Route INSP-05 (Depot ➔ ${cleanLocationShortName})`;
+  const routeName = options?.routeName || `Route INSP (${cleanLocationShortName})`;
 
   const generatedRoute: GeneratedBusRoute = {
     routeId,
@@ -400,8 +565,8 @@ export function generateBusRouteForLocation(
     routeName,
     driverName: 'Devendra Gohil (Fleet Inspection Pilot)',
     speedKmh: 32,
-    lat: routeCoordinates[0][0],
-    lng: routeCoordinates[0][1],
+    lat: targetLat,
+    lng: targetLng,
     headingDeg: 65,
     routeCoordinates,
     currentWaypointIndex: 0,

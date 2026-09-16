@@ -102,7 +102,7 @@ export const AuthorityActionModal: React.FC<AuthorityActionModalProps> = ({
             </div>
             <div>
               <h2 className="font-mono text-sm font-bold text-slate-100 uppercase tracking-wide">
-                Layer 2: Municipal Authority Action
+                Authority & Verification: Municipal Action
               </h2>
               <p className="text-[11px] text-slate-400 font-mono">
                 Declare road closure, add construction zone, or log inspector report

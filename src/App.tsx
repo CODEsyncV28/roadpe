@@ -8,6 +8,7 @@ import { SimulateDetectionModal } from './components/SimulateDetectionModal';
 import { AuthorityActionModal } from './components/AuthorityActionModal';
 import { LayerManagerPanel } from './components/LayerManagerPanel';
 import { UploadInterfaceModal } from './components/UploadInterfaceModal';
+import { AssignProblemModal } from './components/AssignProblemModal';
 import { 
   RoadIssue, 
   BusFleet, 
@@ -42,7 +43,74 @@ export default function App() {
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [isSimulateModalOpen, setIsSimulateModalOpen] = useState(false);
   const [isManualAddModalOpen, setIsManualAddModalOpen] = useState(false);
+  const [problemToAssign, setProblemToAssign] = useState<RoadIssue | null>(null);
   const [showLayerManager, setShowLayerManager] = useState(true);
+
+  // Fetch persisted problems from backend on initial mount
+  useEffect(() => {
+    fetch('/api/problems')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data && data.success && Array.isArray(data.problems) && data.problems.length > 0) {
+          const backendIssues: RoadIssue[] = data.problems.map((p: any) => {
+            const resolvedLocName = p.locationName || (typeof p.location === 'string' ? p.location : p.location?.address || p.location?.city) || (p.lat && p.lng ? `${p.lat.toFixed(4)}°N, ${p.lng.toFixed(4)}°E` : 'Location not selected');
+            const resolvedLat = typeof p.lat === 'number' ? p.lat : (p.location?.latitude || 0);
+            const resolvedLng = typeof p.lng === 'number' ? p.lng : (p.location?.longitude || 0);
+            const hasLocation = p.hasSelectedLocation ?? (resolvedLat !== 0 && resolvedLng !== 0);
+
+            return {
+              id: p.id,
+              type: p.type || 'pothole',
+              title: p.title || `Detected Hazard ${p.id}`,
+              locationName: resolvedLocName,
+              lat: resolvedLat,
+              lng: resolvedLng,
+              hasSelectedLocation: hasLocation,
+              location: p.location && typeof p.location === 'object' ? p.location : (hasLocation ? {
+                latitude: resolvedLat,
+                longitude: resolvedLng,
+                address: resolvedLocName,
+                formattedAddress: resolvedLocName,
+              } : undefined),
+              googleMapsUrl: p.googleMapsUrl || (hasLocation ? `https://www.google.com/maps?q=${resolvedLat.toFixed(6)},${resolvedLng.toFixed(6)}` : undefined),
+              severity: p.severity || 'HIGH',
+              confidence: p.confidence || 94,
+              busId: p.busId || 'BUS-03',
+              busRoute: p.busRoute || 'Route 1',
+              timestamp: p.timestamp || new Date().toLocaleString(),
+              status: p.status || 'Pending',
+              verification: p.verification || 'Pending Verification',
+              evidenceImage: p.evidenceImage || p.image || '/results/result_1789567316953_vgh5qcj.jpg',
+              boundingBoxes: p.boundingBoxes || [],
+              assignedAuthority: p.assignedAuthority,
+              assignedDept: p.assignedDept,
+              assignedPerson: p.assignedPerson,
+              priority: p.priority,
+              dueDate: p.dueDate,
+              notes: p.notes,
+              authorityNotes: p.authorityNotes,
+              workflowHistory: p.workflowHistory,
+              telemetry: {
+                speedKmh: 38,
+                zVibrationG: 1.8,
+                roadRoughnessIRI: 5.2,
+                cameraFov: 'Forward Bus Dashcam',
+                weatherCondition: 'Clear Sunlight',
+              },
+            };
+          });
+
+          setIssues((prev) => {
+            const backendIds = new Set(backendIssues.map((b) => b.id));
+            const existingRemaining = prev.filter((i) => !backendIds.has(i.id));
+            return [...backendIssues, ...existingRemaining];
+          });
+        }
+      })
+      .catch((err) => {
+        console.warn('Backend problems load note:', err);
+      });
+  }, []);
 
   // Live Toast Notification
   const [liveToast, setLiveToast] = useState<{ id: string; title: string; busId: string; severity: Severity } | null>(null);
@@ -195,6 +263,13 @@ export default function App() {
     if (selectedIssue?.id === updated.id) {
       setSelectedIssue(updated);
     }
+    // Sync with backend database
+    fetch(`/api/problems/${updated.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updated),
+    }).catch((e) => console.warn('Backend problem update sync note:', e));
+
     if (generatedBus) {
       setBusFleet((prev) => [
         generatedBus,
@@ -207,6 +282,244 @@ export default function App() {
         severity: updated.severity,
       });
       setTimeout(() => setLiveToast(null), 6000);
+    }
+  };
+
+  // Linear Workflow: Authority Verification Action
+  const handleVerifyProblem = async (issueId: string) => {
+    try {
+      const res = await fetch(`/api/problems/${issueId}/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ verifiedBy: 'Authorized Municipal Inspector' }),
+      });
+      const data = await res.json();
+      if (data && data.success && data.problem) {
+        setIssues((prev) =>
+          prev.map((i) =>
+            i.id === issueId
+              ? {
+                  ...i,
+                  verification: 'Verified',
+                  authorityNotes: data.problem.authorityNotes,
+                  workflowHistory: data.problem.workflowHistory,
+                }
+              : i
+          )
+        );
+        if (selectedIssue?.id === issueId) {
+          setSelectedIssue((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  verification: 'Verified',
+                  authorityNotes: data.problem.authorityNotes,
+                  workflowHistory: data.problem.workflowHistory,
+                }
+              : null
+          );
+        }
+        return;
+      }
+    } catch (e) {
+      console.warn('Backend verify call note:', e);
+    }
+    // Optimistic fallback
+    setIssues((prev) =>
+      prev.map((i) => (i.id === issueId ? { ...i, verification: 'Verified' } : i))
+    );
+    if (selectedIssue?.id === issueId) {
+      setSelectedIssue((prev) => (prev ? { ...prev, verification: 'Verified' } : null));
+    }
+  };
+
+  // Linear Workflow: Authority Rejection Action
+  const handleRejectProblem = async (issueId: string) => {
+    try {
+      const res = await fetch(`/api/problems/${issueId}/reject`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: 'Rejected after municipal review: Non-actionable road variation' }),
+      });
+      const data = await res.json();
+      if (data && data.success && data.problem) {
+        setIssues((prev) =>
+          prev.map((i) =>
+            i.id === issueId
+              ? {
+                  ...i,
+                  verification: 'Rejected',
+                  status: 'Rejected',
+                  workflowHistory: data.problem.workflowHistory,
+                }
+              : i
+          )
+        );
+        if (selectedIssue?.id === issueId) {
+          setSelectedIssue((prev) =>
+            prev ? { ...prev, verification: 'Rejected', status: 'Rejected', workflowHistory: data.problem.workflowHistory } : null
+          );
+        }
+        return;
+      }
+    } catch (e) {
+      console.warn('Backend reject call note:', e);
+    }
+    // Optimistic fallback
+    setIssues((prev) =>
+      prev.map((i) => (i.id === issueId ? { ...i, verification: 'Rejected', status: 'Rejected' } : i))
+    );
+    if (selectedIssue?.id === issueId) {
+      setSelectedIssue((prev) => (prev ? { ...prev, verification: 'Rejected', status: 'Rejected' } : null));
+    }
+  };
+
+  // Linear Workflow: Assign Problem to Department Action
+  const handleAssignProblem = async (
+    issueId: string,
+    assignmentData: {
+      assignedAuthority: string;
+      assignedDept: string;
+      assignedPerson: string;
+      priority: any;
+      dueDate: string;
+      notes: string;
+    }
+  ) => {
+    try {
+      const res = await fetch(`/api/problems/${issueId}/assign`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(assignmentData),
+      });
+      const data = await res.json();
+      if (data && data.success && data.problem) {
+        const p = data.problem;
+        setIssues((prev) =>
+          prev.map((i) =>
+            i.id === issueId
+              ? {
+                  ...i,
+                  assignedAuthority: p.assignedAuthority,
+                  assignedDept: p.assignedDept,
+                  assignedPerson: p.assignedPerson,
+                  priority: p.priority,
+                  dueDate: p.dueDate,
+                  notes: p.notes,
+                  status: i.status === 'Pending' || i.status === 'PENDING' ? 'In Progress' : i.status,
+                  workflowHistory: p.workflowHistory,
+                }
+              : i
+          )
+        );
+        if (selectedIssue?.id === issueId) {
+          setSelectedIssue((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  assignedAuthority: p.assignedAuthority,
+                  assignedDept: p.assignedDept,
+                  assignedPerson: p.assignedPerson,
+                  priority: p.priority,
+                  dueDate: p.dueDate,
+                  notes: p.notes,
+                  status: prev.status === 'Pending' || prev.status === 'PENDING' ? 'In Progress' : prev.status,
+                  workflowHistory: p.workflowHistory,
+                }
+              : null
+          );
+        }
+        return;
+      }
+    } catch (e) {
+      console.warn('Backend assign call note:', e);
+    }
+    // Optimistic fallback
+    setIssues((prev) =>
+      prev.map((i) =>
+        i.id === issueId
+          ? {
+              ...i,
+              ...assignmentData,
+              status: i.status === 'Pending' || i.status === 'PENDING' ? 'In Progress' : i.status,
+            }
+          : i
+      )
+    );
+    if (selectedIssue?.id === issueId) {
+      setSelectedIssue((prev) =>
+        prev
+          ? {
+              ...prev,
+              ...assignmentData,
+              status: prev.status === 'Pending' || prev.status === 'PENDING' ? 'In Progress' : prev.status,
+            }
+          : null
+      );
+    }
+  };
+
+  // Linear Workflow: Update Problem Status Action (Pending / In Progress / Solved)
+  const handleUpdateStatus = async (issueId: string, status: 'Pending' | 'In Progress' | 'Solved') => {
+    try {
+      const res = await fetch(`/api/problems/${issueId}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status }),
+      });
+      const data = await res.json();
+      if (data && data.success && data.problem) {
+        setIssues((prev) =>
+          prev.map((i) =>
+            i.id === issueId
+              ? {
+                  ...i,
+                  status,
+                  roadCondition: status === 'Solved' ? 'Repaired' : i.roadCondition,
+                  workflowHistory: data.problem.workflowHistory,
+                }
+              : i
+          )
+        );
+        if (selectedIssue?.id === issueId) {
+          setSelectedIssue((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  status,
+                  roadCondition: status === 'Solved' ? 'Repaired' : prev.roadCondition,
+                  workflowHistory: data.problem.workflowHistory,
+                }
+              : null
+          );
+        }
+        return;
+      }
+    } catch (e) {
+      console.warn('Backend status call note:', e);
+    }
+    // Optimistic fallback
+    setIssues((prev) =>
+      prev.map((i) =>
+        i.id === issueId
+          ? {
+              ...i,
+              status,
+              roadCondition: status === 'Solved' ? 'Repaired' : i.roadCondition,
+            }
+          : i
+      )
+    );
+    if (selectedIssue?.id === issueId) {
+      setSelectedIssue((prev) =>
+        prev
+          ? {
+              ...prev,
+              status,
+              roadCondition: status === 'Solved' ? 'Repaired' : prev.roadCondition,
+            }
+          : null
+      );
     }
   };
 
@@ -330,13 +643,17 @@ export default function App() {
 
       </div>
 
-      {/* Bottom Layer Manager Panel (Layer 1 AI, Layer 2 Authority, Layer 3 Maintenance) */}
+      {/* Bottom Linear Workflow Panel (AI Detection, Authority & Verification, Problem Status Tracking) */}
       {showLayerManager && (
         <LayerManagerPanel
           activeLayer={activeLayer}
           issues={issues}
           onSelectIssue={(issue) => setSelectedIssue(issue)}
           onUpdateIssue={handleUpdateIssue}
+          onOpenAssignModal={(issue) => setProblemToAssign(issue)}
+          onVerifyProblem={handleVerifyProblem}
+          onRejectProblem={handleRejectProblem}
+          onUpdateStatus={handleUpdateStatus}
           onClose={() => setShowLayerManager(false)}
         />
       )}
@@ -376,12 +693,23 @@ export default function App() {
         </div>
       )}
 
-      {/* Modal 1: Issue Detail View (Combining map location + severity + confidence + evidence image + 3 Layers) */}
+      {/* Modal 1: Issue Detail View */}
       {selectedIssue && (
         <IssueDetailModal
           issue={selectedIssue}
           onClose={() => setSelectedIssue(null)}
           onUpdateIssue={handleUpdateIssue}
+          onOpenAssignModal={(issue) => setProblemToAssign(issue)}
+        />
+      )}
+
+      {/* Modal 6: Assign Problem to Municipal Authority / Department */}
+      {problemToAssign && (
+        <AssignProblemModal
+          isOpen={!!problemToAssign}
+          issue={problemToAssign}
+          onClose={() => setProblemToAssign(null)}
+          onAssign={handleAssignProblem}
         />
       )}
 

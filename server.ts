@@ -80,6 +80,18 @@ if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
+export interface DetailedLocation {
+  latitude: number;
+  longitude: number;
+  city?: string;
+  district?: string;
+  state?: string;
+  country?: string;
+  postalCode?: string;
+  formattedAddress?: string;
+  address?: string;
+}
+
 export interface StoredProblem {
   id: string; // e.g. "RV-0001"
   type: string; // "pothole" | "road_damage" | "waterlogging" | "accident" | "construction"
@@ -87,6 +99,9 @@ export interface StoredProblem {
   locationName: string;
   lat: number;
   lng: number;
+  location?: DetailedLocation;
+  hasSelectedLocation?: boolean;
+  googleMapsUrl?: string;
   severity: 'HIGH' | 'MEDIUM' | 'LOW';
   priority?: 'Low' | 'Medium' | 'High' | 'Critical';
   confidence: number;
@@ -153,6 +168,137 @@ function getNextProblemId(problems: StoredProblem[]): string {
   const nextNum = maxNum + 1;
   return `RV-${String(nextNum).padStart(4, '0')}`;
 }
+
+// Reverse geocoding helper and endpoint
+async function reverseGeocodeCoords(lat: number, lng: number): Promise<DetailedLocation> {
+  let defaultCity = 'Urban Sector';
+  let defaultState = 'Gujarat';
+  let defaultAddress = `${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E, Gujarat`;
+
+  if (lat >= 22.15 && lat <= 22.45 && lng >= 73.05 && lng <= 73.35) {
+    defaultCity = 'Vadodara';
+    defaultAddress = `Vadodara, Gujarat, India`;
+  } else if (lat >= 21.60 && lat <= 21.80 && lng >= 72.85 && lng <= 73.15) {
+    defaultCity = 'Bharuch';
+    defaultAddress = `Bharuch, Gujarat, India`;
+  } else if (lat >= 22.90 && lat <= 23.25 && lng >= 72.40 && lng <= 72.80) {
+    defaultCity = 'Ahmedabad';
+    defaultAddress = `Ahmedabad, Gujarat, India`;
+  } else if (lat >= 21.05 && lat <= 21.30 && lng >= 72.70 && lng <= 73.00) {
+    defaultCity = 'Surat';
+    defaultAddress = `Surat, Gujarat, India`;
+  } else if (lat >= 21.55 && lat <= 21.68 && lng >= 72.95 && lng <= 73.08) {
+    defaultCity = 'Ankleshwar';
+    defaultAddress = `Ankleshwar, Gujarat, India`;
+  } else if (lat >= 23.15 && lat <= 23.35 && lng >= 72.55 && lng <= 72.75) {
+    defaultCity = 'Gandhinagar';
+    defaultAddress = `Gandhinagar, Gujarat, India`;
+  } else if (lat >= 22.15 && lat <= 22.40 && lng >= 70.65 && lng <= 70.95) {
+    defaultCity = 'Rajkot';
+    defaultAddress = `Rajkot, Gujarat, India`;
+  }
+
+  // Attempt Nominatim reverse geocoding with 2500ms timeout
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 2500);
+    const nomUrl = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`;
+    const res = await fetch(nomUrl, {
+      signal: controller.signal,
+      headers: {
+        'User-Agent': 'RoadVision-AI-Urban-Fleet/1.0',
+        'Accept': 'application/json',
+      },
+    });
+    clearTimeout(timeoutId);
+    if (res.ok) {
+      const data: any = await res.json();
+      if (data && data.address) {
+        const addr = data.address;
+        const city = addr.city || addr.town || addr.village || addr.suburb || addr.county || defaultCity;
+        const state = addr.state || defaultState;
+        const country = addr.country || 'India';
+        const district = addr.state_district || addr.county || '';
+        const postalCode = addr.postcode || '';
+        const formattedAddress = data.display_name || `${city}, ${state}, ${country}`;
+        return {
+          latitude: lat,
+          longitude: lng,
+          city,
+          state,
+          country,
+          district,
+          postalCode,
+          formattedAddress,
+          address: formattedAddress,
+        };
+      }
+    }
+  } catch (_e) {
+    // Timeout or network unavailable - safe fallback
+  }
+
+  return {
+    latitude: lat,
+    longitude: lng,
+    city: defaultCity,
+    state: defaultState,
+    country: 'India',
+    formattedAddress: defaultAddress,
+    address: defaultAddress,
+  };
+}
+
+// Reverse Geocoding API endpoint
+app.get('/api/reverse-geocode', async (req: Request, res: Response) => {
+  const lat = parseFloat(req.query.lat as string);
+  const lng = parseFloat(req.query.lng as string);
+
+  if (isNaN(lat) || isNaN(lng)) {
+    return res.status(400).json({ success: false, error: 'Valid lat and lng query params required' });
+  }
+
+  const result = await reverseGeocodeCoords(lat, lng);
+  console.log(`[GEOCODE] Reverse geocoded (${lat}, ${lng}) -> ${result.formattedAddress}`);
+  res.json({ success: true, location: result });
+});
+
+// Geocoding query endpoint
+app.get('/api/geocode', (req: Request, res: Response) => {
+  const query = ((req.query.q as string) || '').toLowerCase().trim();
+  const citiesMap: Record<string, { lat: number; lng: number; city: string; state: string }> = {
+    vadodara: { lat: 22.3072, lng: 73.1812, city: 'Vadodara', state: 'Gujarat' },
+    baroda: { lat: 22.3072, lng: 73.1812, city: 'Vadodara', state: 'Gujarat' },
+    bharuch: { lat: 21.7085, lng: 72.9860, city: 'Bharuch', state: 'Gujarat' },
+    ahmedabad: { lat: 23.0225, lng: 72.5714, city: 'Ahmedabad', state: 'Gujarat' },
+    surat: { lat: 21.1702, lng: 72.8311, city: 'Surat', state: 'Gujarat' },
+    ankleshwar: { lat: 21.6264, lng: 73.0034, city: 'Ankleshwar', state: 'Gujarat' },
+    gandhinagar: { lat: 23.2156, lng: 72.6369, city: 'Gandhinagar', state: 'Gujarat' },
+    rajkot: { lat: 22.3039, lng: 70.8022, city: 'Rajkot', state: 'Gujarat' },
+  };
+
+  for (const [key, info] of Object.entries(citiesMap)) {
+    if (query.includes(key)) {
+      return res.json({
+        success: true,
+        location: {
+          latitude: info.lat,
+          longitude: info.lng,
+          city: info.city,
+          state: info.state,
+          country: 'India',
+          formattedAddress: `${info.city}, ${info.state}, India`,
+          address: `${info.city}, ${info.state}`,
+        },
+      });
+    }
+  }
+
+  return res.json({
+    success: false,
+    error: 'Location not found in local index',
+  });
+});
 
 // GET all problems
 app.get('/api/problems', (_req: Request, res: Response) => {
@@ -589,7 +735,7 @@ const uploadMiddleware = upload.fields([
 ]);
 
 app.post('/api/detect-hazard', (req: Request, res: Response, next) => {
-  uploadMiddleware(req, res, (err) => {
+  uploadMiddleware(req as any, res as any, (err: any) => {
     if (err) {
       console.error('[YOLO Upload Error]', err.message);
       return res.status(400).json({ success: false, error: err.message });
@@ -682,7 +828,32 @@ app.post('/api/detect-hazard', (req: Request, res: Response, next) => {
     const timestampQuery = Date.now();
     const resultImageUrl = `/results/${outputFilename}?t=${timestampQuery}`;
 
-    // 5. Automatically create real persistent Problem Records from YOLO Detections
+    // 5. Extract and Validate Location Data from Upload
+    const locationSelectedRaw = req.body && req.body.locationSelected;
+    const hasLocation = req.body && (
+      locationSelectedRaw === 'true' ||
+      (req.body.lat && !isNaN(parseFloat(req.body.lat)) && parseFloat(req.body.lat) !== 0)
+    );
+
+    const baseLat = hasLocation ? parseFloat(req.body.lat) : 0;
+    const baseLng = hasLocation ? parseFloat(req.body.lng) : 0;
+    const city = (req.body && req.body.city) || '';
+    const district = (req.body && req.body.district) || '';
+    const state = (req.body && req.body.state) || 'Gujarat';
+    const country = (req.body && req.body.country) || 'India';
+    const address = (req.body && req.body.address) || '';
+    const locationName = hasLocation
+      ? (req.body.locationName || address || (city ? `${city}, ${state}` : `Location (${baseLat.toFixed(4)}, ${baseLng.toFixed(4)})`))
+      : 'Location not selected';
+
+    // Step-by-step required debug tracing:
+    console.log(`[LOCATION] Upload ID: ${uploadId}`);
+    console.log(`[LOCATION] Latitude: ${hasLocation ? baseLat : 'Not provided'}`);
+    console.log(`[LOCATION] Longitude: ${hasLocation ? baseLng : 'Not provided'}`);
+    console.log(`[LOCATION] City: ${city || (hasLocation ? 'Derived' : 'None')}`);
+    console.log(`[LOCATION] Address: ${locationName}`);
+
+    // 6. Automatically create real persistent Problem Records from YOLO Detections
     const currentProblems = loadProblems();
     const createdProblems: StoredProblem[] = [];
     const nowTimeStr = new Date().toLocaleTimeString('en-IN', { hour12: false }) + ' IST';
@@ -692,18 +863,35 @@ app.post('/api/detect-hazard', (req: Request, res: Response, next) => {
     for (let i = 0; i < detections.length; i++) {
       const d = detections[i];
       const problemId = getNextProblemId([...currentProblems, ...createdProblems]);
+      const probLat = hasLocation ? baseLat + (i * 0.0007) : 0;
+      const probLng = hasLocation ? baseLng + (i * 0.0005) : 0;
+
+      const detailedLocation: DetailedLocation | undefined = hasLocation ? {
+        latitude: probLat,
+        longitude: probLng,
+        city: city || (locationName.includes('Vadodara') ? 'Vadodara' : locationName.includes('Bharuch') ? 'Bharuch' : ''),
+        district: district,
+        state: state,
+        country: country,
+        address: locationName,
+        formattedAddress: address || locationName,
+      } : undefined;
+
       const newProblem: StoredProblem = {
         id: problemId,
         type: d.class,
         title: d.title || `Detected ${d.class.replace('_', ' ').toUpperCase()} on Carriageway`,
-        locationName: (req.body && req.body.locationName) || 'Station Road Overbridge Corridor, Bharuch',
-        lat: (req.body && req.body.lat) ? parseFloat(req.body.lat) + (i * 0.0007) : 21.7085 + (i * 0.0007),
-        lng: (req.body && req.body.lng) ? parseFloat(req.body.lng) + (i * 0.0005) : 72.9860 + (i * 0.0005),
+        locationName: locationName,
+        lat: probLat,
+        lng: probLng,
+        location: detailedLocation,
+        hasSelectedLocation: hasLocation,
+        googleMapsUrl: (req.body && req.body.googleMapsUrl) || (hasLocation ? `https://www.google.com/maps?q=${probLat.toFixed(6)},${probLng.toFixed(6)}` : undefined),
         severity: d.severity,
         priority: d.severity === 'HIGH' ? 'Critical' : 'Medium',
         confidence: d.confidence,
         busId: (req.body && req.body.busId) || 'BUS-07',
-        busRoute: (req.body && req.body.busRoute) || 'Route 4B (Station - GIDC Industrial)',
+        busRoute: (req.body && req.body.busRoute) || (city ? `${city} Transit Corridor` : 'Survey Transit Corridor'),
         timestamp: timestampStr,
         status: 'Pending',
         verification: 'Pending Verification',
@@ -740,11 +928,13 @@ app.post('/api/detect-hazard', (req: Request, res: Response, next) => {
           {
             stage: 'Detected',
             timestamp: timestampStr,
-            note: `AI YOLOv8 model detected ${d.class} with ${d.confidence}% confidence from uploaded media.`,
+            note: `AI YOLOv8 model detected ${d.class} with ${d.confidence}% confidence from uploaded media at ${locationName}.`,
           },
         ],
       };
       createdProblems.push(newProblem);
+      console.log(`[YOLO] Detection created: ${problemId} [${d.class}]`);
+      console.log(`[DATABASE] Location saved: ${locationName} (${probLat}, ${probLng})`);
     }
 
     if (createdProblems.length > 0) {
@@ -768,7 +958,19 @@ app.post('/api/detect-hazard', (req: Request, res: Response, next) => {
         depthCm: d.depthCm,
         zBumpG: d.zBumpG,
       })),
+      problems: createdProblems,
       createdProblems,
+      location: hasLocation ? {
+        latitude: baseLat,
+        longitude: baseLng,
+        city,
+        state,
+        country,
+        address: locationName,
+        formattedAddress: address || locationName,
+      } : undefined,
+      locationName,
+      hasSelectedLocation: hasLocation,
       metadata: {
         originalName,
         width: metadata.width,
@@ -777,6 +979,8 @@ app.post('/api/detect-hazard', (req: Request, res: Response, next) => {
         processedAt: new Date().toISOString(),
       },
     };
+
+    console.log(`[API RESPONSE] Upload ${uploadId} processed: ${createdProblems.length} detection(s) associated with location: ${locationName}`);
 
     // Required Debug Logging 7: Backend response
     console.log(`[YOLO Pipeline] 7. Backend response: ${JSON.stringify({
@@ -799,23 +1003,38 @@ app.post('/api/detect-hazard', (req: Request, res: Response, next) => {
 
 // Start the Express and Vite Server
 async function startServer() {
-  if (process.env.NODE_ENV !== 'production') {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: 'spa',
-    });
-    app.use(vite.middlewares);
-  } else {
-    const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (_req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
-    });
-  }
+  try {
+    if (process.env.NODE_ENV !== 'production') {
+      const vite = await createViteServer({
+        server: { middlewareMode: true },
+        appType: 'spa',
+      });
+      app.use(vite.middlewares);
+    } else {
+      const distPath = path.join(process.cwd(), 'dist');
+      app.use(express.static(distPath));
+      app.get('*', (_req, res) => {
+        res.sendFile(path.join(distPath, 'index.html'));
+      });
+    }
 
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`[RoadVision Server] Server listening on http://0.0.0.0:${PORT}`);
-  });
+    const server = app.listen(PORT, '0.0.0.0', () => {
+      console.log(`[RoadVision Server] Server listening on http://0.0.0.0:${PORT}`);
+    });
+
+    const shutdown = () => {
+      console.log('[RoadVision Server] Gracefully shutting down...');
+      server.close(() => {
+        process.exit(0);
+      });
+    };
+
+    process.on('SIGTERM', shutdown);
+    process.on('SIGINT', shutdown);
+  } catch (err) {
+    console.error('[RoadVision Server] Failed to start server:', err);
+    process.exit(1);
+  }
 }
 
 startServer();

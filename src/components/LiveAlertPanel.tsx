@@ -48,8 +48,9 @@ export const LiveAlertPanel: React.FC<LiveAlertPanelProps> = ({
   const filteredIssues = issues.filter((issue) => {
     if (filterType !== 'ALL' && issue.type !== filterType) return false;
     if (filterSeverity !== 'ALL' && issue.severity !== filterSeverity) return false;
-    if (statusFilter === 'ACTIVE' && issue.status === 'RESOLVED') return false;
-    if (statusFilter === 'RESOLVED' && issue.status !== 'RESOLVED') return false;
+    const isIssueResolved = issue.status === 'RESOLVED' || issue.status === 'Solved';
+    if (statusFilter === 'ACTIVE' && isIssueResolved) return false;
+    if (statusFilter === 'RESOLVED' && !isIssueResolved) return false;
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       const match =
@@ -246,7 +247,9 @@ export const LiveAlertPanel: React.FC<LiveAlertPanelProps> = ({
         ) : (
           filteredIssues.map((issue) => {
             const isSelected = selectedIssue?.id === issue.id;
-            const isResolved = issue.status === 'RESOLVED';
+            const isResolved = issue.status === 'RESOLVED' || issue.status === 'Solved';
+            const isVerified = issue.verification === 'VERIFIED' || issue.verification === 'Verified';
+            const isRejected = issue.verification === 'Rejected' || issue.status === 'Rejected';
 
             return (
               <div
@@ -268,10 +271,15 @@ export const LiveAlertPanel: React.FC<LiveAlertPanelProps> = ({
                         <span className="font-mono text-xs font-bold text-cyan-400">
                           {issue.id}
                         </span>
-                        {issue.verification === 'VERIFIED' && (
+                        {isVerified && (
                           <span className="text-[10px] font-mono px-1 py-0.2 rounded bg-emerald-950 text-emerald-400 border border-emerald-800 flex items-center gap-0.5">
                             <ShieldCheck className="w-2.5 h-2.5" />
                             <span>VERIFIED</span>
+                          </span>
+                        )}
+                        {isRejected && (
+                          <span className="text-[10px] font-mono px-1 py-0.2 rounded bg-rose-950 text-rose-400 border border-rose-800 flex items-center gap-0.5">
+                            <span>REJECTED</span>
                           </span>
                         )}
                       </div>
@@ -289,7 +297,7 @@ export const LiveAlertPanel: React.FC<LiveAlertPanelProps> = ({
                         isResolved
                       )}`}
                     >
-                      {isResolved ? 'RESOLVED' : `${issue.severity}`}
+                      {isResolved ? 'RESOLVED' : isRejected ? 'REJECTED' : `${issue.severity}`}
                     </span>
                     <span className="text-[10px] font-mono text-cyan-300 font-semibold">
                       🤖 {issue.confidence}%
@@ -344,12 +352,14 @@ export const LiveAlertPanel: React.FC<LiveAlertPanelProps> = ({
                     <span
                       className={`px-1.5 py-0.2 rounded font-semibold ${
                         isResolved
-                          ? 'text-emerald-400'
-                          : issue.status === 'IN_PROGRESS'
-                          ? 'text-cyan-400'
-                          : issue.status === 'DISPATCHED'
-                          ? 'text-amber-400'
-                          : 'text-slate-300'
+                          ? 'text-emerald-400 bg-emerald-950/40 border border-emerald-800/40'
+                          : isRejected
+                          ? 'text-rose-400 bg-rose-950/40 border border-rose-800/40'
+                          : issue.status === 'In Progress' || issue.status === 'IN_PROGRESS'
+                          ? 'text-cyan-400 bg-cyan-950/40 border border-cyan-800/40'
+                          : issue.assignedAuthority || issue.status === 'DISPATCHED'
+                          ? 'text-amber-400 bg-amber-950/40 border border-amber-800/40'
+                          : 'text-slate-300 bg-slate-900 border border-slate-700/50'
                       }`}
                     >
                       {issue.status}

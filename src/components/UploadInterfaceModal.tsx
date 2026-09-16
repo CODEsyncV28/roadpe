@@ -211,11 +211,11 @@ export const UploadInterfaceModal: React.FC<UploadInterfaceModalProps> = ({
   const [processingError, setProcessingError] = useState<string | null>(null);
 
   // Google Maps Location Attachment State
-  const [googleMapsInput, setGoogleMapsInput] = useState<string>('https://maps.google.com/?q=21.7160,72.9920');
+  const [googleMapsInput, setGoogleMapsInput] = useState<string>('');
   const [attachedGMapLocation, setAttachedGMapLocation] = useState<ParsedGoogleMapsLocation>(() =>
-    parseGoogleMapsInput('https://maps.google.com/?q=21.7160,72.9920')
+    parseGoogleMapsInput('')
   );
-  const [isLocationAttached, setIsLocationAttached] = useState<boolean>(true);
+  const [isLocationAttached, setIsLocationAttached] = useState<boolean>(false);
 
   // Generated Bus Route State
   const [generatedRouteData, setGeneratedRouteData] = useState<{
@@ -235,14 +235,50 @@ export const UploadInterfaceModal: React.FC<UploadInterfaceModalProps> = ({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Parse Google Maps Location handler
-  const handleParseLocation = (customVal?: string) => {
+  const handleParseLocation = async (customVal?: string) => {
     const valToParse = customVal !== undefined ? customVal : googleMapsInput;
-    const parsed = parseGoogleMapsInput(valToParse);
+    if (!valToParse.trim()) {
+      const empty = parseGoogleMapsInput('');
+      setAttachedGMapLocation(empty);
+      setIsLocationAttached(false);
+      return;
+    }
+
+    let parsed = parseGoogleMapsInput(valToParse);
+
+    // If text query, try calling backend geocode endpoint for rich address metadata
+    if ((!parsed.isValid || parsed.sourceType === 'CITY_MATCH') && valToParse.trim().length >= 2) {
+      try {
+        const res = await fetch(`/api/geocode?q=${encodeURIComponent(valToParse.trim())}`);
+        if (res.ok) {
+          const geo = await res.json();
+          if (geo && geo.success && geo.location) {
+            parsed = {
+              lat: geo.location.latitude,
+              lng: geo.location.longitude,
+              isValid: true,
+              name: geo.location.address || geo.location.formattedAddress || valToParse,
+              formattedCoordinates: `${geo.location.latitude.toFixed(5)}°N, ${geo.location.longitude.toFixed(5)}°E`,
+              sourceType: 'GEOCODE_API',
+              googleMapsUrl: `https://www.google.com/maps?q=${geo.location.latitude.toFixed(6)},${geo.location.longitude.toFixed(6)}`,
+              city: geo.location.city,
+              state: geo.location.state,
+              country: geo.location.country || 'India',
+              address: geo.location.address,
+              formattedAddress: geo.location.formattedAddress,
+            };
+          }
+        }
+      } catch (e) {
+        console.warn('Geocoding API note:', e);
+      }
+    }
+
     setAttachedGMapLocation(parsed);
-    setIsLocationAttached(true);
+    setIsLocationAttached(parsed.isValid);
 
     // If route was already generated, automatically update route for new point
-    if (generatedRouteData) {
+    if (generatedRouteData && parsed.isValid) {
       const regenerated = generateBusRouteForLocation(parsed.lat, parsed.lng, parsed.name);
       setGeneratedRouteData(regenerated);
     }
@@ -250,9 +286,22 @@ export const UploadInterfaceModal: React.FC<UploadInterfaceModalProps> = ({
 
   // Preset Landmark selector handler
   const handleSelectLandmark = (landmark: typeof PRESET_GMAP_LANDMARKS[0]) => {
-    const gUrl = landmark.address ? `https://maps.google.com/?q=${landmark.lat},${landmark.lng}` : '';
+    const gUrl = `https://maps.google.com/?q=${landmark.lat},${landmark.lng}`;
     setGoogleMapsInput(gUrl);
-    const parsed = parseGoogleMapsInput(landmark.name);
+    const parsed: ParsedGoogleMapsLocation = {
+      lat: landmark.lat,
+      lng: landmark.lng,
+      isValid: true,
+      name: landmark.name,
+      formattedCoordinates: `${landmark.lat.toFixed(5)}°N, ${landmark.lng.toFixed(5)}°E`,
+      sourceType: 'LANDMARK_PRESET',
+      googleMapsUrl: gUrl,
+      city: landmark.city,
+      state: landmark.state,
+      country: 'India',
+      address: landmark.address,
+      formattedAddress: `${landmark.name}, ${landmark.address}`,
+    };
     setAttachedGMapLocation(parsed);
     setIsLocationAttached(true);
 
@@ -345,6 +394,24 @@ export const UploadInterfaceModal: React.FC<UploadInterfaceModalProps> = ({
         formData.append('image', selectedFile);
         formData.append('uploadId', activeUploadId);
 
+        // LOCATION SYNCHRONIZATION: Transmit selected location fields to backend
+        if (isLocationAttached && attachedGMapLocation.isValid) {
+          formData.append('locationSelected', 'true');
+          formData.append('lat', String(attachedGMapLocation.lat));
+          formData.append('lng', String(attachedGMapLocation.lng));
+          formData.append('locationName', attachedGMapLocation.name);
+          if (attachedGMapLocation.city) formData.append('city', attachedGMapLocation.city);
+          if (attachedGMapLocation.state) formData.append('state', attachedGMapLocation.state);
+          if (attachedGMapLocation.country) formData.append('country', attachedGMapLocation.country || 'India');
+          if (attachedGMapLocation.address) formData.append('address', attachedGMapLocation.address);
+          if (attachedGMapLocation.googleMapsUrl) formData.append('googleMapsUrl', attachedGMapLocation.googleMapsUrl);
+        } else {
+          formData.append('locationSelected', 'false');
+          formData.append('lat', '0');
+          formData.append('lng', '0');
+          formData.append('locationName', 'Location not selected');
+        }
+
         console.log('[Frontend Upload] Calling POST /api/detect-hazard...');
         setProcessingPercent(60);
         setProcessingStage('Running YOLOv8 road hazard model & computing bounding boxes...');
@@ -377,41 +444,79 @@ export const UploadInterfaceModal: React.FC<UploadInterfaceModalProps> = ({
           return;
         }
 
+        const hasLocation = Boolean(data.hasSelectedLocation || (isLocationAttached && attachedGMapLocation.isValid));
+        const resolvedLocName = hasLocation
+          ? (data.locationName || attachedGMapLocation.name)
+          : 'Location not selected';
+        const resolvedLat = hasLocation
+          ? (data.location?.latitude ?? attachedGMapLocation.lat)
+          : 0;
+        const resolvedLng = hasLocation
+          ? (data.location?.longitude ?? attachedGMapLocation.lng)
+          : 0;
+        const resolvedCity = hasLocation
+          ? (data.location?.city || attachedGMapLocation.city || (resolvedLocName.includes('Vadodara') ? 'Vadodara' : ''))
+          : '';
+
         setProcessingPercent(85);
-        setProcessingStage('Mapping detection metadata to Bharuch transit grid...');
+        setProcessingStage(hasLocation ? `Mapping detection metadata to ${resolvedCity || resolvedLocName}...` : 'Formatting detection metadata...');
 
         const nowStr = new Date().toLocaleTimeString('en-IN', { hour12: false }) + ' IST';
         const todayDate = new Date().toISOString().split('T')[0];
-        const primaryMapping = BHARUCH_TIMELINE_MAPPINGS[0];
 
         // Map backend detections into RoadIssue structure
         let newIssues: RoadIssue[] = (data.detections || []).map((det: any, idx: number) => {
-          const newId = `DET-${Math.floor(9300 + Math.random() * 600)}`;
+          const backendProblem = data.problems && data.problems[idx];
+          const newId = backendProblem?.id || det.id || `DET-${Math.floor(9300 + Math.random() * 600)}`;
           const timestampStr = `${todayDate} ${nowStr}`;
+
+          const issueLat = hasLocation ? resolvedLat + (idx > 0 ? idx * 0.0006 : 0) : 0;
+          const issueLng = hasLocation ? resolvedLng + (idx > 0 ? idx * 0.0005 : 0) : 0;
+
+          const assignedCorridor = generatedRouteData
+            ? generatedRouteData.route.routeName
+            : (resolvedCity ? `${resolvedCity} Transit Survey Corridor` : (hasLocation ? `${resolvedLocName} Corridor` : selectedCorridor));
 
           return {
             id: newId,
             type: (det.class as IssueType) || 'pothole',
-            title: det.title || `Detected ${String(det.class).toUpperCase()} on Roadway`,
-            locationName: primaryMapping.locationName,
-            lat: primaryMapping.lat + (idx > 0 ? idx * 0.0008 : 0),
-            lng: primaryMapping.lng + (idx > 0 ? idx * 0.0006 : 0),
+            title: det.title || (backendProblem?.title) || `Detected ${String(det.class).toUpperCase()} on Roadway`,
+            locationName: resolvedLocName,
+            lat: issueLat,
+            lng: issueLng,
+            hasSelectedLocation: hasLocation,
+            location: hasLocation ? {
+              latitude: issueLat,
+              longitude: issueLng,
+              city: resolvedCity,
+              state: attachedGMapLocation.state || 'Gujarat',
+              country: 'India',
+              address: resolvedLocName,
+              formattedAddress: attachedGMapLocation.formattedAddress || resolvedLocName,
+            } : undefined,
+            googleMapsUrl: hasLocation ? (attachedGMapLocation.googleMapsUrl || `https://www.google.com/maps?q=${issueLat.toFixed(6)},${issueLng.toFixed(6)}`) : undefined,
+            attachedLocationMethod: hasLocation
+              ? (attachedGMapLocation.sourceType === 'URL_QUERY' || attachedGMapLocation.sourceType === 'URL_COORDINATE_PATH'
+                ? 'GOOGLE_MAPS_LINK'
+                : 'COORDINATES')
+              : undefined,
+            generatedBusRoute: generatedRouteData ? generatedRouteData.route : undefined,
             severity: det.severity || 'HIGH',
             confidence: det.confidence || 94.0,
-            busId: customBusId || 'BUS-07',
-            busRoute: selectedCorridor,
+            busId: generatedRouteData ? generatedRouteData.bus.id : (customBusId || 'BUS-07'),
+            busRoute: assignedCorridor,
             timestamp: timestampStr,
             videoTimestamp: 'Uploaded Frame',
             sourceMedia: {
               fileName: selectedFile.name,
               fileType: fileInputType,
-              busIdTag: customBusId || 'BUS-07',
-              corridor: selectedCorridor,
+              busIdTag: customBusId || (generatedRouteData ? generatedRouteData.bus.id : 'BUS-07'),
+              corridor: assignedCorridor,
               uploadTime: timestampStr,
-              locationMappingMethod: 'PREDEFINED_TIMELINE_MAPPING',
+              locationMappingMethod: hasLocation ? 'GOOGLE_MAPS_ATTACHMENT' : 'LOCATION_NOT_SELECTED',
             },
-            status: 'PENDING',
-            verification: 'AI_DETECTED',
+            status: 'Pending',
+            verification: 'Pending Verification',
             evidenceImage: data.result_image, // Exact annotated output image returned by backend!
             boundingBoxes: [
               {
@@ -442,30 +547,6 @@ export const UploadInterfaceModal: React.FC<UploadInterfaceModalProps> = ({
             priorityScore: Math.floor(82 + Math.random() * 14),
           };
         });
-
-        // Apply attached Google Maps location if present
-        if (isLocationAttached && attachedGMapLocation.isValid) {
-          newIssues = newIssues.map((issue, idx) => ({
-            ...issue,
-            locationName: attachedGMapLocation.name,
-            lat: attachedGMapLocation.lat + (idx > 0 ? idx * 0.0006 : 0),
-            lng: attachedGMapLocation.lng + (idx > 0 ? idx * 0.0005 : 0),
-            googleMapsUrl: attachedGMapLocation.googleMapsUrl,
-            attachedLocationMethod:
-              attachedGMapLocation.sourceType === 'URL_QUERY' || attachedGMapLocation.sourceType === 'URL_COORDINATE_PATH'
-                ? 'GOOGLE_MAPS_LINK'
-                : 'COORDINATES',
-            generatedBusRoute: generatedRouteData ? generatedRouteData.route : undefined,
-            busRoute: generatedRouteData ? generatedRouteData.route.routeName : issue.busRoute,
-            busId: generatedRouteData ? generatedRouteData.bus.id : issue.busId,
-            sourceMedia: issue.sourceMedia
-              ? {
-                  ...issue.sourceMedia,
-                  locationMappingMethod: 'GOOGLE_MAPS_ATTACHMENT',
-                }
-              : undefined,
-          }));
-        }
 
         setProcessingPercent(100);
         setProcessingStage('YOLOv8 Detection Complete! Annotated result ready.');
@@ -555,26 +636,40 @@ export const UploadInterfaceModal: React.FC<UploadInterfaceModalProps> = ({
         });
 
         if (isLocationAttached && attachedGMapLocation.isValid) {
-          newIssues = newIssues.map((issue, idx) => ({
-            ...issue,
-            locationName: attachedGMapLocation.name,
-            lat: attachedGMapLocation.lat + (idx > 0 ? idx * 0.0006 : 0),
-            lng: attachedGMapLocation.lng + (idx > 0 ? idx * 0.0005 : 0),
-            googleMapsUrl: attachedGMapLocation.googleMapsUrl,
-            attachedLocationMethod:
-              attachedGMapLocation.sourceType === 'URL_QUERY' || attachedGMapLocation.sourceType === 'URL_COORDINATE_PATH'
-                ? 'GOOGLE_MAPS_LINK'
-                : 'COORDINATES',
-            generatedBusRoute: generatedRouteData ? generatedRouteData.route : undefined,
-            busRoute: generatedRouteData ? generatedRouteData.route.routeName : issue.busRoute,
-            busId: generatedRouteData ? generatedRouteData.bus.id : issue.busId,
-            sourceMedia: issue.sourceMedia
-              ? {
-                  ...issue.sourceMedia,
-                  locationMappingMethod: 'GOOGLE_MAPS_ATTACHMENT',
-                }
-              : undefined,
-          }));
+          newIssues = newIssues.map((issue, idx) => {
+            const issueLat = attachedGMapLocation.lat + (idx > 0 ? idx * 0.0006 : 0);
+            const issueLng = attachedGMapLocation.lng + (idx > 0 ? idx * 0.0005 : 0);
+            return {
+              ...issue,
+              locationName: attachedGMapLocation.name,
+              lat: issueLat,
+              lng: issueLng,
+              hasSelectedLocation: true,
+              location: {
+                latitude: issueLat,
+                longitude: issueLng,
+                city: attachedGMapLocation.city || (attachedGMapLocation.name.includes('Vadodara') ? 'Vadodara' : 'Bharuch'),
+                state: attachedGMapLocation.state || 'Gujarat',
+                country: 'India',
+                address: attachedGMapLocation.name,
+                formattedAddress: attachedGMapLocation.formattedAddress || attachedGMapLocation.name,
+              },
+              googleMapsUrl: attachedGMapLocation.googleMapsUrl,
+              attachedLocationMethod:
+                attachedGMapLocation.sourceType === 'URL_QUERY' || attachedGMapLocation.sourceType === 'URL_COORDINATE_PATH'
+                  ? 'GOOGLE_MAPS_LINK'
+                  : 'COORDINATES',
+              generatedBusRoute: generatedRouteData ? generatedRouteData.route : undefined,
+              busRoute: generatedRouteData ? generatedRouteData.route.routeName : (attachedGMapLocation.city ? `${attachedGMapLocation.city} Survey Route` : issue.busRoute),
+              busId: generatedRouteData ? generatedRouteData.bus.id : issue.busId,
+              sourceMedia: issue.sourceMedia
+                ? {
+                    ...issue.sourceMedia,
+                    locationMappingMethod: 'GOOGLE_MAPS_ATTACHMENT',
+                  }
+                : undefined,
+            };
+          });
         }
 
         setProcessingPercent(100);
@@ -587,7 +682,19 @@ export const UploadInterfaceModal: React.FC<UploadInterfaceModalProps> = ({
 
   const handleApplyToDashboard = () => {
     if (processedDetections && processedDetections.length > 0) {
-      const busToDeploy = autoDeployRoute && generatedRouteData ? generatedRouteData.bus : undefined;
+      let busToDeploy = autoDeployRoute && generatedRouteData ? generatedRouteData.bus : undefined;
+
+      // If user specified a location and route wasn't explicitly generated, auto-create a route bus for that location
+      if (!busToDeploy && autoDeployRoute && isLocationAttached && attachedGMapLocation.isValid) {
+        const autoGen = generateBusRouteForLocation(
+          attachedGMapLocation.lat,
+          attachedGMapLocation.lng,
+          attachedGMapLocation.name,
+          { busId: 'BUS-05', busNumber: 'GJ-06-V-2026' }
+        );
+        busToDeploy = autoGen.bus;
+      }
+
       onIngestDetections(processedDetections, busToDeploy);
       onClose();
     }
@@ -841,7 +948,7 @@ export const UploadInterfaceModal: React.FC<UploadInterfaceModalProps> = ({
                     {/* Quick-Pick Landmark Chips */}
                     <div>
                       <div className="text-[10px] text-slate-400 mb-1.5 flex items-center justify-between">
-                        <span>Quick Select Bharuch Transit Landmarks:</span>
+                        <span>Quick Select Transit Landmarks (Vadodara &amp; Bharuch):</span>
                         <span className="text-slate-500 font-mono">1-Click Auto-Fill</span>
                       </div>
                       <div className="flex flex-wrap gap-1.5">
@@ -860,6 +967,7 @@ export const UploadInterfaceModal: React.FC<UploadInterfaceModalProps> = ({
                             >
                               <MapPin className="w-2.5 h-2.5 text-cyan-400" />
                               <span>{lm.name.split('&')[0].trim()}</span>
+                              <span className="text-[9px] text-cyan-400/80 font-sans">({lm.city})</span>
                             </button>
                           );
                         })}
@@ -867,32 +975,48 @@ export const UploadInterfaceModal: React.FC<UploadInterfaceModalProps> = ({
                     </div>
 
                     {/* Location Verification Card */}
-                    <div className="p-3 rounded-lg bg-[#060a14] border border-cyan-900/70 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                    <div className={`p-3 rounded-lg border flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs ${
+                      attachedGMapLocation.isValid
+                        ? 'bg-[#060a14] border-cyan-900/70'
+                        : 'bg-slate-950/80 border-slate-800'
+                    }`}>
                       <div className="space-y-0.5">
                         <div className="flex items-center gap-2">
-                          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-cyan-950 text-cyan-300 border border-cyan-700">
-                            {attachedGMapLocation.sourceType}
+                          <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold border ${
+                            attachedGMapLocation.isValid
+                              ? 'bg-cyan-950 text-cyan-300 border-cyan-700'
+                              : 'bg-slate-900 text-slate-400 border-slate-700'
+                          }`}>
+                            {attachedGMapLocation.isValid ? attachedGMapLocation.sourceType : 'NOT SELECTED'}
                           </span>
                           <span className="font-bold text-slate-200 truncate max-w-sm">
-                            {attachedGMapLocation.name}
+                            {attachedGMapLocation.isValid ? attachedGMapLocation.name : 'Location not selected'}
                           </span>
                         </div>
-                        <div className="text-[11px] text-cyan-400 font-mono flex items-center gap-2">
-                          <span>Coordinates: {attachedGMapLocation.formattedCoordinates}</span>
-                          <span>•</span>
-                          <span className="text-slate-400">Lat {attachedGMapLocation.lat.toFixed(5)}, Lng {attachedGMapLocation.lng.toFixed(5)}</span>
+                        <div className="text-[11px] font-mono flex items-center gap-2">
+                          {attachedGMapLocation.isValid ? (
+                            <>
+                              <span className="text-cyan-400">Coordinates: {attachedGMapLocation.formattedCoordinates}</span>
+                              <span className="text-slate-500">•</span>
+                              <span className="text-slate-400">Lat {attachedGMapLocation.lat.toFixed(5)}, Lng {attachedGMapLocation.lng.toFixed(5)}</span>
+                            </>
+                          ) : (
+                            <span className="text-slate-500">Enter a Google Maps URL/coordinates above or pick a quick landmark</span>
+                          )}
                         </div>
                       </div>
 
-                      <a
-                        href={attachedGMapLocation.googleMapsUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-cyan-300 border border-slate-700 hover:border-cyan-500 text-xs font-mono transition-colors shrink-0"
-                      >
-                        <span>Open in Google Maps</span>
-                        <ExternalLink className="w-3.5 h-3.5" />
-                      </a>
+                      {attachedGMapLocation.isValid && attachedGMapLocation.googleMapsUrl ? (
+                        <a
+                          href={attachedGMapLocation.googleMapsUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-cyan-300 border border-slate-700 hover:border-cyan-500 text-xs font-mono transition-colors shrink-0"
+                        >
+                          <span>Open in Google Maps</span>
+                          <ExternalLink className="w-3.5 h-3.5" />
+                        </a>
+                      ) : null}
                     </div>
 
                     {/* Action: Generate Bus Route for this Location */}
