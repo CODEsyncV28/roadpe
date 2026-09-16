@@ -1,0 +1,6 @@
+{
+  "name": "RoadVision AI",
+  "description": "AI-powered mobile urban intelligence platform using public transport fleets to detect road damage, potholes, and hazards in real time for municipal response.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
