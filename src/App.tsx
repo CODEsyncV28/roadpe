@@ -9,6 +9,7 @@ import { AuthorityActionModal } from './components/AuthorityActionModal';
 import { LayerManagerPanel } from './components/LayerManagerPanel';
 import { UploadInterfaceModal } from './components/UploadInterfaceModal';
 import { AssignProblemModal } from './components/AssignProblemModal';
+import { SolveProblemModal } from './components/SolveProblemModal';
 import { 
   RoadIssue, 
   BusFleet, 
@@ -41,6 +42,7 @@ export default function App() {
 
   // Modals
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+  const [problemToSolve, setProblemToSolve] = useState<RoadIssue | null>(null);
   const [isSimulateModalOpen, setIsSimulateModalOpen] = useState(false);
   const [isManualAddModalOpen, setIsManualAddModalOpen] = useState(false);
   const [problemToAssign, setProblemToAssign] = useState<RoadIssue | null>(null);
@@ -117,6 +119,35 @@ export default function App() {
 
   // Real-time Clock
   const [currentTime, setCurrentTime] = useState('');
+
+  // Polling for auto-completed problems
+  useEffect(() => {
+    const WORK_DURATION_MS = 120000;
+    const interval = setInterval(() => {
+      let needsFetch = false;
+      const now = Date.now();
+      setIssues(prev => {
+        for (const p of prev) {
+          if ((p.status === 'In Progress' || p.status === 'IN_PROGRESS') && p.startedAt && now - p.startedAt >= WORK_DURATION_MS) {
+            needsFetch = true;
+            break;
+          }
+        }
+        return prev;
+      });
+      if (needsFetch) {
+        fetch('/api/problems')
+          .then(res => res.json())
+          .then(data => {
+            if (data.success && data.problems) {
+              setIssues(data.problems);
+            }
+          })
+          .catch(err => console.warn('Failed to auto-fetch problems', err));
+      }
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Save to localStorage on change
   useEffect(() => {
@@ -406,7 +437,7 @@ export default function App() {
                   priority: p.priority,
                   dueDate: p.dueDate,
                   notes: p.notes,
-                  status: i.status === 'Pending' || i.status === 'PENDING' ? 'In Progress' : i.status,
+                  status: i.status,
                   workflowHistory: p.workflowHistory,
                 }
               : i
@@ -460,12 +491,12 @@ export default function App() {
   };
 
   // Linear Workflow: Update Problem Status Action (Pending / In Progress / Solved)
-  const handleUpdateStatus = async (issueId: string, status: 'Pending' | 'In Progress' | 'Solved') => {
+  const handleUpdateStatus = async (issueId: string, status: 'Pending' | 'In Progress' | 'Solved', notes?: string) => {
     try {
       const res = await fetch(`/api/problems/${issueId}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status }),
+        body: JSON.stringify({ status, notes }),
       });
       const data = await res.json();
       if (data && data.success && data.problem) {
@@ -653,7 +684,14 @@ export default function App() {
           onOpenAssignModal={(issue) => setProblemToAssign(issue)}
           onVerifyProblem={handleVerifyProblem}
           onRejectProblem={handleRejectProblem}
-          onUpdateStatus={handleUpdateStatus}
+          onUpdateStatus={(issueId, status) => {
+            if (status === 'Solved') {
+              const prob = issues.find((i) => i.id === issueId);
+              if (prob) setProblemToSolve(prob);
+            } else {
+              handleUpdateStatus(issueId, status);
+            }
+          }}
           onClose={() => setShowLayerManager(false)}
         />
       )}
@@ -710,6 +748,18 @@ export default function App() {
           issue={problemToAssign}
           onClose={() => setProblemToAssign(null)}
           onAssign={handleAssignProblem}
+        />
+      )}
+
+      {/* Modal 7: Solve Problem Completion */}
+      {problemToSolve && (
+        <SolveProblemModal
+          isOpen={!!problemToSolve}
+          issue={problemToSolve}
+          onClose={() => setProblemToSolve(null)}
+          onSolve={async (id, notes) => {
+            await handleUpdateStatus(id, 'Solved', notes);
+          }}
         />
       )}
 

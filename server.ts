@@ -124,6 +124,8 @@ export interface StoredProblem {
   boundingBoxes?: any[];
   telemetry?: any;
   estimatedDimensions?: any;
+  startedAt?: number;
+  solvedAt?: number;
   workflowHistory?: Array<{
     stage: string;
     timestamp: string;
@@ -303,6 +305,29 @@ app.get('/api/geocode', (req: Request, res: Response) => {
 // GET all problems
 app.get('/api/problems', (_req: Request, res: Response) => {
   const problems = loadProblems();
+  let changed = false;
+  const now = Date.now();
+  const WORK_DURATION_MS = 120000;
+
+  problems.forEach(p => {
+    if (p.status === 'In Progress' && p.startedAt && now >= p.startedAt + WORK_DURATION_MS) {
+      p.status = 'Solved';
+      p.solvedAt = now;
+      p.roadCondition = 'Repaired';
+      if (!p.workflowHistory) p.workflowHistory = [];
+      p.workflowHistory.push({
+        stage: 'Solved',
+        timestamp: new Date().toLocaleTimeString('en-IN') + ' IST',
+        note: 'Auto-completed after 2 minutes'
+      });
+      changed = true;
+    }
+  });
+
+  if (changed) {
+    saveProblems(problems);
+  }
+
   res.json({ success: true, problems, count: problems.length });
 });
 
@@ -518,6 +543,14 @@ app.patch('/api/problems/:id/status', (req: Request, res: Response) => {
     workflowHistory: history,
     roadCondition: status === 'Solved' ? 'Repaired' : existing.roadCondition,
   };
+
+  if (status === 'In Progress' && existing.status !== 'In Progress') {
+    updated.startedAt = Date.now();
+  }
+  
+  if (status === 'Solved' && existing.status !== 'Solved') {
+    updated.solvedAt = Date.now();
+  }
 
   problems[index] = updated;
   saveProblems(problems);

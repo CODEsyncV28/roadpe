@@ -119,6 +119,8 @@ export interface RoadIssue {
   timestamp: string;
   status: WorkflowStatus;
   verification: VerificationStatus;
+  startedAt?: number;
+  solvedAt?: number;
   evidenceImage: string;
   boundingBoxes: BoundingBox[];
   telemetry: {

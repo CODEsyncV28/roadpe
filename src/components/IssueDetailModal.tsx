@@ -73,21 +73,71 @@ export const IssueDetailModal: React.FC<IssueDetailModalProps> = ({
   const [afterRepairImage, setAfterRepairImage] = useState(issue.afterRepairImage || '');
   const [savedSuccessMsg, setSavedSuccessMsg] = useState('');
 
-  const handleSaveAuthorityChanges = () => {
-    const updated: RoadIssue = {
+  const handleSaveAuthorityChanges = (overrideVerification?: VerificationStatus) => {
+    const finalVerification = overrideVerification || verification;
+    
+    let updated: RoadIssue = {
       ...issue,
-      verification,
-      roadCondition,
-      type: correctedType,
-      roadClosureActive,
-      detourRouteName: roadClosureActive ? detourRouteName : undefined,
-      speedLimitKmh,
-      authorityNotes,
+      verification: finalVerification,
       verifiedBy: 'Municipal Senior Inspector (Badge #4092)',
       verifiedAt: new Date().toLocaleTimeString() + ' IST',
     };
+
+    const newHistory = [...(updated.workflowHistory || [])];
+    let stageStr = 'Verified';
+    let noteStr = authorityNotes || 'AI detection verified by staff';
+
+    if (finalVerification === 'FALSE_POSITIVE' || finalVerification === 'False Positive') {
+      updated.status = 'Closed';
+      updated.falsePositiveReason = authorityNotes;
+      updated.authorityNotes = authorityNotes;
+      stageStr = 'False Positive';
+      noteStr = authorityNotes || 'Closed as false positive';
+    } else if (finalVerification === 'AUTHORITY_OVERRIDE' || finalVerification === 'Authority Override') {
+      updated.roadCondition = roadCondition;
+      updated.type = correctedType;
+      updated.roadClosureActive = roadClosureActive;
+      updated.detourRouteName = roadClosureActive ? detourRouteName : undefined;
+      updated.speedLimitKmh = speedLimitKmh;
+      updated.authorityNotes = authorityNotes;
+      updated.authorityOverride = {
+        originalType: issue.type,
+        newType: correctedType,
+        originalSeverity: issue.severity,
+        newSeverity: issue.severity,
+        authority: 'Municipal Senior Inspector (Badge #4092)',
+        reason: authorityNotes,
+        timestamp: new Date().toLocaleTimeString() + ' IST',
+        roadClosureActive,
+        speedLimitKmh
+      };
+      stageStr = 'Override';
+      noteStr = authorityNotes || 'Authority override applied';
+    } else if (finalVerification === 'VERIFIED' || finalVerification === 'Verified by Staff' || finalVerification === 'Verified') {
+      updated.verificationNotes = authorityNotes;
+      updated.authorityNotes = authorityNotes;
+      stageStr = 'Verified';
+      noteStr = authorityNotes || 'AI detection verified by staff';
+    }
+
+    if (issue.verification !== finalVerification) {
+        newHistory.push({
+            stage: stageStr,
+            timestamp: new Date().toLocaleTimeString() + ' IST',
+            author: 'Municipal Senior Inspector (Badge #4092)',
+            note: noteStr
+        });
+        updated.workflowHistory = newHistory;
+    }
+
     onUpdateIssue(updated);
-    setSavedSuccessMsg('Authority Layer changes saved successfully.');
+    setVerification(finalVerification);
+    
+    setSavedSuccessMsg(
+      finalVerification === 'FALSE_POSITIVE' || finalVerification === 'False Positive' 
+        ? 'Marked as False Positive and closed.' 
+        : 'Authority Layer changes saved successfully.'
+    );
     setTimeout(() => setSavedSuccessMsg(''), 3000);
   };
 
@@ -789,29 +839,31 @@ export const IssueDetailModal: React.FC<IssueDetailModalProps> = ({
               <div className="space-y-3.5 text-xs font-mono">
                 
                 {/* Assign Problem Banner */}
-                <div className="p-3 rounded-lg bg-indigo-950/40 border border-indigo-500/50 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5">
-                  <div>
-                    <span className="text-slate-200 font-bold block text-[11px] flex items-center gap-1.5">
-                      <Building2 className="w-3.5 h-3.5 text-indigo-400" />
-                      <span>Assign Problem to Municipal Department</span>
-                    </span>
-                    <span className="text-[10px] text-slate-400 block mt-0.5">
-                      {issue.assignedAuthority
-                        ? `Currently assigned to ${issue.assignedAuthority}${issue.assignedPerson ? ` (${issue.assignedPerson})` : ''}`
-                        : 'Not yet assigned to any maintenance crew'}
-                    </span>
+                {(issue.verification === 'VERIFIED' || issue.verification === 'Verified' || issue.verification === 'Verified by Staff' || issue.verification === 'AUTHORITY_OVERRIDE' || issue.verification === 'Authority Override') && (
+                  <div className="p-3 rounded-lg bg-indigo-950/40 border border-indigo-500/50 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5">
+                    <div>
+                      <span className="text-slate-200 font-bold block text-[11px] flex items-center gap-1.5">
+                        <Building2 className="w-3.5 h-3.5 text-indigo-400" />
+                        <span>Assign Problem to Municipal Department</span>
+                      </span>
+                      <span className="text-[10px] text-slate-400 block mt-0.5">
+                        {issue.assignedAuthority
+                          ? `Currently assigned to ${issue.assignedAuthority}${issue.assignedPerson ? ` (${issue.assignedPerson})` : ''}`
+                          : 'Not yet assigned to any maintenance crew'}
+                      </span>
+                    </div>
+                    {onOpenAssignModal && (
+                      <button
+                        type="button"
+                        onClick={() => onOpenAssignModal(issue)}
+                        className="px-3.5 py-1.5 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 shadow-md shadow-cyan-500/20 transition-all cursor-pointer shrink-0"
+                      >
+                        <Send className="w-3.5 h-3.5" />
+                        <span>{issue.assignedAuthority ? 'Reassign Problem' : 'Assign Problem'}</span>
+                      </button>
+                    )}
                   </div>
-                  {onOpenAssignModal && (
-                    <button
-                      type="button"
-                      onClick={() => onOpenAssignModal(issue)}
-                      className="px-3.5 py-1.5 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 shadow-md shadow-cyan-500/20 transition-all cursor-pointer shrink-0"
-                    >
-                      <Send className="w-3.5 h-3.5" />
-                      <span>{issue.assignedAuthority ? 'Reassign Problem' : 'Assign Problem'}</span>
-                    </button>
-                  )}
-                </div>
+                )}
 
                 {/* Verification Status */}
                 <div className="p-3 rounded-lg bg-slate-950 border border-slate-800 space-y-2">
@@ -841,110 +893,200 @@ export const IssueDetailModal: React.FC<IssueDetailModalProps> = ({
                   </div>
                 </div>
 
-                {/* Edit Road Condition & Type Correction */}
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="p-3 rounded-lg bg-slate-950 border border-slate-800 space-y-1.5">
-                    <label className="text-slate-300 font-bold block text-[11px]">
-                      2. Road Condition Index:
-                    </label>
-                    <select
-                      value={roadCondition}
-                      onChange={(e) => setRoadCondition(e.target.value as any)}
-                      className="w-full bg-slate-900 border border-slate-700 rounded p-1.5 text-xs text-slate-100 focus:outline-none focus:border-cyan-500"
-                    >
-                      <option value="Critical">Critical (Immediate Hazard)</option>
-                      <option value="Hazardous">Hazardous</option>
-                      <option value="Poor">Poor</option>
-                      <option value="Moderate">Moderate</option>
-                      <option value="Repaired">Repaired / Normal</option>
-                    </select>
+                {/* Conditional UI based on Verification State */}
+                {verification === 'AI_DETECTED' || verification === 'Pending Verification' ? (
+                  <div className="p-3 rounded-lg bg-slate-900 border border-slate-700 space-y-2">
+                    <p className="text-slate-300 font-bold mb-2 text-[11px]">AI Detection Information (Read-Only)</p>
+                    <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-400">
+                      <div><span className="block text-slate-500">Problem Type:</span><strong className="text-slate-200 capitalize">{issue.type.replace('_', ' ')}</strong></div>
+                      <div><span className="block text-slate-500">Confidence:</span><strong className="text-cyan-300">{issue.confidence}%</strong></div>
+                      <div><span className="block text-slate-500">Severity:</span><strong className="text-amber-300">{issue.severity}</strong></div>
+                      <div className="col-span-2"><span className="block text-slate-500">Location:</span><strong className="text-slate-200">{issue.locationName}</strong></div>
+                    </div>
+                    <div className="pt-2">
+                      <button
+                        type="button"
+                        onClick={() => handleSaveAuthorityChanges('VERIFIED')}
+                        className="w-full py-2 px-3 rounded bg-cyan-600 hover:bg-cyan-500 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-md"
+                      >
+                        <ShieldCheck className="w-4 h-4" />
+                        <span>Send for Verification / Verify Detection</span>
+                      </button>
+                    </div>
                   </div>
-
-                  <div className="p-3 rounded-lg bg-slate-950 border border-slate-800 space-y-1.5">
-                    <label className="text-slate-300 font-bold block text-[11px]">
-                      3. Correct Defect Classification:
-                    </label>
-                    <select
-                      value={correctedType}
-                      onChange={(e) => setCorrectedType(e.target.value as any)}
-                      className="w-full bg-slate-900 border border-slate-700 rounded p-1.5 text-xs text-slate-100 focus:outline-none focus:border-cyan-500"
-                    >
-                      <option value="pothole">Pothole</option>
-                      <option value="waterlogging">Waterlogging</option>
-                      <option value="road_damage">Road Damage / Cracks</option>
-                      <option value="accident">Accident / Incident</option>
-                      <option value="construction">Construction Zone</option>
-                      <option value="road_closed">Road Closed</option>
-                    </select>
-                  </div>
-                </div>
-
-                {/* Road Closure & Speed Limit */}
-                <div className="p-3 rounded-lg bg-slate-950 border border-slate-800 space-y-2.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-300 font-bold text-[11px]">
-                      4. Emergency Road Closure &amp; Speed Regulation:
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setRoadClosureActive(!roadClosureActive)}
-                      className={`px-2 py-0.5 rounded text-[11px] font-mono transition-colors cursor-pointer border ${
-                        roadClosureActive
-                          ? 'bg-rose-500/20 text-rose-300 border-rose-500 font-bold'
-                          : 'bg-slate-900 text-slate-400 border-slate-800'
-                      }`}
-                    >
-                      {roadClosureActive ? 'Road Closed [ACTIVE]' : 'Road Open'}
-                    </button>
-                  </div>
-
-                  {roadClosureActive && (
-                    <div className="space-y-1.5 pt-1">
-                      <label className="text-slate-400 text-[10px] block">Detour Route Name:</label>
-                      <input
-                        type="text"
-                        value={detourRouteName}
-                        onChange={(e) => setDetourRouteName(e.target.value)}
-                        placeholder="e.g., Divert via GIDC Link Road 2B..."
-                        className="w-full bg-slate-900 border border-slate-700 rounded p-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+                ) : (verification === 'VERIFIED' || verification === 'Verified by Staff' || verification === 'Verified') ? (
+                  <div className="p-3 rounded-lg bg-slate-900 border border-slate-700 space-y-3">
+                    <p className="text-emerald-400 font-bold text-[11px] flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5" /> Verified by Staff</p>
+                    <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-400 p-2 bg-slate-950 rounded">
+                      <div><span className="block text-slate-500">Problem Type:</span><strong className="text-slate-200 capitalize">{issue.type.replace('_', ' ')}</strong></div>
+                      <div><span className="block text-slate-500">Severity:</span><strong className="text-amber-300">{issue.severity}</strong></div>
+                      <div className="col-span-2"><span className="block text-slate-500">Location:</span><strong className="text-slate-200">{issue.locationName}</strong></div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-slate-400 text-[10px] block">Optional Verification Notes:</label>
+                      <textarea
+                        rows={2}
+                        value={authorityNotes}
+                        onChange={(e) => setAuthorityNotes(e.target.value)}
+                        placeholder="Enter verification notes..."
+                        className="w-full bg-slate-950 border border-slate-700 rounded p-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500"
                       />
                     </div>
-                  )}
-
-                  <div className="flex items-center justify-between pt-1 border-t border-slate-900">
-                    <span className="text-slate-400 text-[11px]">Regulated Speed Limit (km/h):</span>
-                    <input
-                      type="number"
-                      value={speedLimitKmh}
-                      onChange={(e) => setSpeedLimitKmh(Number(e.target.value))}
-                      className="w-20 bg-slate-900 border border-slate-700 rounded p-1 text-xs text-center text-amber-300 font-bold focus:outline-none focus:border-cyan-500"
-                    />
+                    <button
+                      type="button"
+                      onClick={() => handleSaveAuthorityChanges()}
+                      className="w-full py-2 px-3 rounded bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-md"
+                    >
+                      <ShieldCheck className="w-4 h-4" />
+                      <span>Confirm Verification</span>
+                    </button>
                   </div>
-                </div>
+                ) : (verification === 'FALSE_POSITIVE' || verification === 'False Positive') ? (
+                  <div className="p-3 rounded-lg bg-rose-950/20 border border-rose-500/50 space-y-3">
+                    <div className="flex items-center gap-2 text-rose-400 font-bold">
+                      <AlertTriangle className="w-4 h-4" />
+                      <span>Are you sure this detection is a false positive?</span>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-slate-400 text-[10px] block">Reason (Optional):</label>
+                      <textarea
+                        rows={2}
+                        value={authorityNotes}
+                        onChange={(e) => setAuthorityNotes(e.target.value)}
+                        placeholder="Why was this marked as false positive?"
+                        className="w-full bg-slate-950 border border-slate-800 rounded p-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-rose-500"
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setVerification('AI_DETECTED')}
+                        className="flex-1 py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-[11px] transition-colors cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleSaveAuthorityChanges()}
+                        className="flex-1 py-1.5 rounded bg-rose-600 hover:bg-rose-500 text-slate-950 font-bold text-[11px] transition-colors cursor-pointer shadow-md"
+                      >
+                        Confirm False Positive
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  // AUTHORITY OVERRIDE
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="p-3 rounded-lg bg-slate-950 border border-slate-800 space-y-1.5">
+                        <label className="text-slate-300 font-bold block text-[11px]">
+                          2. Road Condition Index:
+                        </label>
+                        <select
+                          value={roadCondition}
+                          onChange={(e) => setRoadCondition(e.target.value as any)}
+                          className="w-full bg-slate-900 border border-slate-700 rounded p-1.5 text-xs text-slate-100 focus:outline-none focus:border-cyan-500"
+                        >
+                          <option value="Critical">Critical (Immediate Hazard)</option>
+                          <option value="Hazardous">Hazardous</option>
+                          <option value="Poor">Poor</option>
+                          <option value="Moderate">Moderate</option>
+                          <option value="Repaired">Repaired / Normal</option>
+                        </select>
+                      </div>
 
-                {/* Authority Notes */}
-                <div className="p-3 rounded-lg bg-slate-950 border border-slate-800 space-y-1.5">
-                  <label className="text-slate-300 font-bold block text-[11px]">
-                    5. Municipal Authority Notes &amp; Observations:
-                  </label>
-                  <textarea
-                    rows={2}
-                    value={authorityNotes}
-                    onChange={(e) => setAuthorityNotes(e.target.value)}
-                    placeholder="Enter municipal verification notes, contractor instructions, or cross-checks..."
-                    className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500"
-                  />
-                </div>
+                      <div className="p-3 rounded-lg bg-slate-950 border border-slate-800 space-y-1.5">
+                        <label className="text-slate-300 font-bold block text-[11px]">
+                          3. Correct Defect Classification:
+                        </label>
+                        <select
+                          value={correctedType}
+                          onChange={(e) => setCorrectedType(e.target.value as any)}
+                          className="w-full bg-slate-900 border border-slate-700 rounded p-1.5 text-xs text-slate-100 focus:outline-none focus:border-cyan-500"
+                        >
+                          <option value="pothole">Pothole</option>
+                          <option value="waterlogging">Waterlogging</option>
+                          <option value="road_damage">Road Damage / Cracks</option>
+                          <option value="accident">Accident / Incident</option>
+                          <option value="construction">Construction Zone</option>
+                          <option value="road_closed">Road Closed</option>
+                        </select>
+                      </div>
+                    </div>
 
-                <button
-                  id="btn-save-authority-actions"
-                  type="button"
-                  onClick={handleSaveAuthorityChanges}
-                  className="w-full py-2 px-3 rounded bg-amber-600 hover:bg-amber-500 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-md"
-                >
-                  <ShieldCheck className="w-4 h-4" />
-                  <span>Save Authority Actions &amp; Apply to Grid</span>
-                </button>
+                    <div className="p-3 rounded-lg bg-slate-950 border border-slate-800 space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-300 font-bold text-[11px]">
+                          4. Emergency Road Closure &amp; Speed Regulation:
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setRoadClosureActive(!roadClosureActive)}
+                          className={`px-2 py-0.5 rounded text-[11px] font-mono transition-colors cursor-pointer border ${
+                            roadClosureActive
+                              ? 'bg-rose-500/20 text-rose-300 border-rose-500 font-bold'
+                              : 'bg-slate-900 text-slate-400 border-slate-800'
+                          }`}
+                        >
+                          {roadClosureActive ? 'Road Closed [ACTIVE]' : 'Road Open'}
+                        </button>
+                      </div>
+
+                      {roadClosureActive && (
+                        <div className="space-y-1.5 pt-1">
+                          <label className="text-slate-400 text-[10px] block">Detour Route Name:</label>
+                          <input
+                            type="text"
+                            value={detourRouteName}
+                            onChange={(e) => setDetourRouteName(e.target.value)}
+                            placeholder="e.g., Divert via GIDC Link Road 2B..."
+                            className="w-full bg-slate-900 border border-slate-700 rounded p-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+                          />
+                        </div>
+                      )}
+
+                      <div className="flex items-center justify-between pt-1 border-t border-slate-900">
+                        <span className="text-slate-400 text-[11px]">Regulated Speed Limit (km/h):</span>
+                        <input
+                          type="number"
+                          value={speedLimitKmh}
+                          onChange={(e) => setSpeedLimitKmh(Number(e.target.value))}
+                          className="w-20 bg-slate-900 border border-slate-700 rounded p-1 text-xs text-center text-amber-300 font-bold focus:outline-none focus:border-cyan-500"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="p-3 rounded-lg bg-slate-950 border border-slate-800 space-y-1.5">
+                      <label className="text-slate-300 font-bold block text-[11px]">
+                        5. Override Reason (Required):
+                      </label>
+                      <textarea
+                        rows={2}
+                        required
+                        value={authorityNotes}
+                        onChange={(e) => setAuthorityNotes(e.target.value)}
+                        placeholder="Enter detailed reason for overriding AI detection..."
+                        className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+                      />
+                    </div>
+
+                    <button
+                      id="btn-save-authority-actions"
+                      type="button"
+                      onClick={() => {
+                        if (!authorityNotes.trim()) {
+                           alert('Override reason is required!');
+                           return;
+                        }
+                        handleSaveAuthorityChanges();
+                      }}
+                      className="w-full py-2 px-3 rounded bg-amber-600 hover:bg-amber-500 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-md"
+                    >
+                      <ShieldCheck className="w-4 h-4" />
+                      <span>Confirm Authority Override &amp; Apply</span>
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 
