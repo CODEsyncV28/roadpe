@@ -6,7 +6,7 @@ export interface ParsedGoogleMapsLocation {
   isValid: boolean;
   name: string;
   formattedCoordinates: string;
-  sourceType: 'URL_QUERY' | 'URL_COORDINATE_PATH' | 'COORDINATE_TEXT' | 'LANDMARK_MATCH' | 'CITY_MATCH' | 'MAP_CLICK' | 'REVERSE_GEOCODED' | 'GEOCODE_API' | 'LANDMARK_PRESET' | 'FALLBACK';
+  sourceType: 'URL_QUERY' | 'URL_COORDINATE_PATH' | 'COORDINATE_TEXT' | 'LANDMARK_MATCH' | 'CITY_MATCH' | 'MAP_CLICK' | 'REVERSE_GEOCODED' | 'GEOCODE_API' | 'LANDMARK_PRESET' | 'PLAIN_ADDRESS' | 'FALLBACK';
   googleMapsUrl: string;
   city?: string;
   district?: string;
@@ -485,9 +485,21 @@ export function parseGoogleMapsInput(input: string): ParsedGoogleMapsLocation {
     }
   }
 
-  // If text doesn't match and coordinates are not found:
-  // Return invalid fallback, NEVER invent coordinates!
-  return fallback;
+  // 9. Plain address / location name: Keep and display that exact user-entered location as source of truth!
+  return {
+    lat: 0,
+    lng: 0,
+    isValid: true,
+    name: trimmed,
+    formattedCoordinates: 'Plain Address (No GPS coordinates in text)',
+    sourceType: 'PLAIN_ADDRESS',
+    googleMapsUrl: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(trimmed)}`,
+    city: '',
+    state: '',
+    country: '',
+    address: trimmed,
+    formattedAddress: trimmed,
+  };
 }
 
 /**

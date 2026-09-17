@@ -292,6 +292,12 @@ export interface StoredProblem {
   type: string; // "pothole" | "road_damage" | "waterlogging" | "accident" | "construction"
   title: string;
   locationName: string;
+  userEnteredLocation?: string;
+  sourceFile?: string;
+  uploadTimestamp?: string;
+  latitude?: number;
+  longitude?: number;
+  detectionType?: string;
   lat: number;
   lng: number;
   location?: DetailedLocation;
@@ -302,6 +308,7 @@ export interface StoredProblem {
   confidence: number;
   busId?: string;
   busRoute?: string;
+  route?: string;
   timestamp: string;
   status: 'Pending' | 'In Progress' | 'Solved' | 'Rejected';
   verification: 'Pending Verification' | 'Verified' | 'Rejected';
@@ -1186,44 +1193,55 @@ const yoloDetectionHandler = async (req: Request, res: Response) => {
     const resultImageUrl = `/results/${outputFilename}?t=${timestampQuery}`;
 
     // 5. Extract and Validate Location Data from Upload
+    const userEnteredLocation = (req.body && (req.body.userEnteredLocation || req.body.locationName)) ? String(req.body.userEnteredLocation || req.body.locationName).trim() : '';
     const locationSelectedRaw = req.body && req.body.locationSelected;
     const rawLat = req.body && req.body.lat !== undefined ? parseFloat(req.body.lat) : NaN;
     const rawLng = req.body && req.body.lng !== undefined ? parseFloat(req.body.lng) : NaN;
     const hasValidCoords = !isNaN(rawLat) && !isNaN(rawLng) && (rawLat !== 0 || rawLng !== 0);
 
-    const hasLocation = Boolean(locationSelectedRaw === 'true' && hasValidCoords);
+    // Has location if either valid coordinates OR user entered a plain address/location name
+    const hasLocation = Boolean(
+      (locationSelectedRaw === 'true' && hasValidCoords) ||
+      (userEnteredLocation && userEnteredLocation !== 'Location not selected')
+    );
 
-    const baseLat = hasLocation ? rawLat : 0;
-    const baseLng = hasLocation ? rawLng : 0;
+    const baseLat = hasValidCoords ? rawLat : 0;
+    const baseLng = hasValidCoords ? rawLng : 0;
     const city = (req.body && req.body.city) || '';
     const district = (req.body && req.body.district) || '';
     const state = (req.body && req.body.state) || '';
     const country = (req.body && req.body.country) || '';
     const address = (req.body && req.body.address) || '';
     const locationName = hasLocation
-      ? (req.body.locationName || address || (city ? `${city}${state ? `, ${state}` : ''}` : `Location (${baseLat.toFixed(6)}, ${baseLng.toFixed(6)})`))
+      ? (userEnteredLocation || address || (hasValidCoords ? `Lat: ${baseLat.toFixed(6)}, Lng: ${baseLng.toFixed(6)}` : (city ? `${city}${state ? `, ${state}` : ''}` : 'User Specified Location')))
       : 'Location not selected';
+
+    // Capture upload timestamp sent from frontend website, or fallback to current moment
+    const nowTimeStr = new Date().toLocaleTimeString('en-IN', { hour12: false }) + ' IST';
+    const todayDate = new Date().toISOString().split('T')[0];
+    const timestampStr = (req.body && req.body.uploadTimestamp) ? String(req.body.uploadTimestamp) : `${todayDate} ${nowTimeStr}`;
+    const sourceFilename = (req.body && req.body.sourceFile) ? String(req.body.sourceFile) : originalName;
+    const selectedBusId = (req.body && req.body.busId) || 'BUS-07';
+    const selectedBusRoute = (req.body && (req.body.busRoute || req.body.route)) || (city ? `${city} Transit Corridor` : 'Survey Transit Corridor');
 
     // Step-by-step required debug tracing:
     console.log(`[STAGE 1 - LOCATION RECEIVED] Upload ID: ${uploadId}`);
-    console.log(`[STAGE 1 - LOCATION RECEIVED] Latitude: ${hasLocation ? baseLat : 'Not provided'}`);
-    console.log(`[STAGE 1 - LOCATION RECEIVED] Longitude: ${hasLocation ? baseLng : 'Not provided'}`);
-    console.log(`[STAGE 1 - LOCATION RECEIVED] City: ${city || 'None'}`);
-    console.log(`[STAGE 1 - LOCATION RECEIVED] Address: ${locationName}`);
+    console.log(`[STAGE 1 - LOCATION RECEIVED] Source File: ${sourceFilename}`);
+    console.log(`[STAGE 1 - LOCATION RECEIVED] Timestamp: ${timestampStr}`);
+    console.log(`[STAGE 1 - LOCATION RECEIVED] Latitude: ${hasValidCoords ? baseLat : 'None'}`);
+    console.log(`[STAGE 1 - LOCATION RECEIVED] Longitude: ${hasValidCoords ? baseLng : 'None'}`);
+    console.log(`[STAGE 1 - LOCATION RECEIVED] User Location: ${locationName}`);
 
     // 6. Automatically create real persistent Problem Records from YOLO Detections
     const currentProblems = loadProblems();
     const createdProblems: StoredProblem[] = [];
-    const nowTimeStr = new Date().toLocaleTimeString('en-IN', { hour12: false }) + ' IST';
-    const todayDate = new Date().toISOString().split('T')[0];
-    const timestampStr = `${todayDate} ${nowTimeStr}`;
 
     for (let i = 0; i < detections.length; i++) {
       const d = detections[i];
       const problemId = getNextProblemId([...currentProblems, ...createdProblems]);
       // EXACT user selected coordinates - NO artificial offsets or false coordinates!
-      const probLat = hasLocation ? baseLat : 0;
-      const probLng = hasLocation ? baseLng : 0;
+      const probLat = hasValidCoords ? baseLat : 0;
+      const probLng = hasValidCoords ? baseLng : 0;
 
       const detailedLocation: DetailedLocation | undefined = hasLocation ? {
         latitude: probLat,
@@ -1239,18 +1257,25 @@ const yoloDetectionHandler = async (req: Request, res: Response) => {
       const newProblem: StoredProblem = {
         id: problemId,
         type: d.class,
+        detectionType: d.class,
         title: d.title || `Detected ${d.class.replace('_', ' ').toUpperCase()} on Carriageway`,
         locationName: locationName,
+        userEnteredLocation: locationName,
+        sourceFile: sourceFilename,
+        uploadTimestamp: timestampStr,
         lat: probLat,
         lng: probLng,
+        latitude: probLat !== 0 ? probLat : undefined,
+        longitude: probLng !== 0 ? probLng : undefined,
         location: detailedLocation,
         hasSelectedLocation: hasLocation,
-        googleMapsUrl: (req.body && req.body.googleMapsUrl) || (hasLocation ? `https://www.google.com/maps?q=${probLat.toFixed(6)},${probLng.toFixed(6)}` : undefined),
+        googleMapsUrl: (req.body && req.body.googleMapsUrl) || (hasValidCoords ? `https://www.google.com/maps?q=${probLat.toFixed(6)},${probLng.toFixed(6)}` : undefined),
         severity: d.severity,
         priority: d.severity === 'HIGH' ? 'Critical' : 'Medium',
         confidence: d.confidence,
-        busId: (req.body && req.body.busId) || 'BUS-07',
-        busRoute: (req.body && req.body.busRoute) || (city ? `${city} Transit Corridor` : 'Survey Transit Corridor'),
+        busId: selectedBusId,
+        busRoute: selectedBusRoute,
+        route: selectedBusRoute,
         timestamp: timestampStr,
         status: 'Pending',
         verification: 'Pending Verification',
@@ -1331,6 +1356,8 @@ const yoloDetectionHandler = async (req: Request, res: Response) => {
       hasSelectedLocation: hasLocation,
       metadata: {
         originalName,
+        sourceFile: sourceFilename,
+        uploadTimestamp: timestampStr,
         width: metadata.width,
         height: metadata.height,
         processingTimeMs: Date.now() - uploadStartTime,

@@ -59,6 +59,13 @@ export const IssueDetailModal: React.FC<IssueDetailModalProps> = ({
     issue.locationName !== 'Location not selected'
   );
 
+  const hasLocation = Boolean(
+    issue.userEnteredLocation ||
+    (issue.locationName && issue.locationName !== 'Location not selected') ||
+    hasValidGps
+  );
+  const displayLocation = issue.userEnteredLocation || issue.locationName || (hasValidGps ? `${issue.lat.toFixed(6)}° N, ${issue.lng.toFixed(6)}° E` : 'Location not selected');
+
   // Google Maps & Route generation state for this issue
   const [gmapInput, setGmapInput] = useState(
     issue.googleMapsUrl || 
@@ -540,10 +547,14 @@ export const IssueDetailModal: React.FC<IssueDetailModalProps> = ({
                   <span className="text-slate-300 truncate block">{issue.busRoute}</span>
                 </div>
                 <div className="col-span-2">
-                  <span className="text-slate-500 block">Exact GPS Coordinates:</span>
+                  <span className="text-slate-500 block">Location / GPS Coordinates:</span>
                   {hasValidGps ? (
                     <span className="text-cyan-400 font-mono text-[10px]">
                       Lat: {issue.lat.toFixed(6)}° N, Lng: {issue.lng.toFixed(6)}° E
+                    </span>
+                  ) : hasLocation ? (
+                    <span className="text-cyan-300 font-mono text-[10px]">
+                      {displayLocation}
                     </span>
                   ) : (
                     <span className="text-amber-400/90 font-mono text-[10px] italic">
@@ -598,7 +609,7 @@ export const IssueDetailModal: React.FC<IssueDetailModalProps> = ({
               </div>
               <div className="text-[11px] text-slate-300">
                 <div className="font-semibold text-slate-200 truncate">
-                  {hasValidGps ? issue.locationName : 'Location not selected'}
+                  {hasLocation ? displayLocation : 'Location not selected'}
                 </div>
                 {hasValidGps ? (
                   <div className="text-[10px] text-cyan-400 font-mono">
@@ -606,7 +617,7 @@ export const IssueDetailModal: React.FC<IssueDetailModalProps> = ({
                   </div>
                 ) : (
                   <div className="text-[10px] text-slate-400 italic">
-                    Coordinates not provided during upload
+                    {hasLocation ? 'Plain Address / Named Location' : 'Coordinates not provided during upload'}
                   </div>
                 )}
               </div>
@@ -750,31 +761,27 @@ export const IssueDetailModal: React.FC<IssueDetailModalProps> = ({
                   <div className="grid grid-cols-2 gap-2 text-[11px] p-2 rounded bg-[#0b1220] border border-slate-800">
                     <div>
                       <span className="text-slate-500 block text-[10px]">Source Footage File:</span>
-                      <span className="text-slate-200 font-bold truncate block">
-                        {issue.sourceMedia?.fileName || 'route4b_dashcam_survey.mp4'}
+                      <span className="text-slate-200 font-bold truncate block" title={issue.sourceFile || issue.sourceMedia?.fileName || 'route4b_dashcam_survey.mp4'}>
+                        {issue.sourceFile || issue.sourceMedia?.fileName || 'route4b_dashcam_survey.mp4'}
                       </span>
                     </div>
                     <div>
-                      <span className="text-slate-500 block text-[10px]">Video Timestamp Mark:</span>
-                      <span className="text-amber-300 font-bold block">
-                        ⏱️ {issue.videoTimestamp || 'at 00:14 in video'}
+                      <span className="text-slate-500 block text-[10px]">Video/Image Timestamp Mark:</span>
+                      <span className="text-amber-300 font-bold block truncate" title={issue.uploadTimestamp || issue.videoTimestamp || issue.timestamp}>
+                        ⏱️ {issue.uploadTimestamp || issue.videoTimestamp || issue.timestamp || 'Website upload timestamp'}
                       </span>
                     </div>
                     <div>
                       <span className="text-slate-500 block text-[10px]">Transit Vehicle Tag:</span>
-                      <span className="text-cyan-300 font-bold">{issue.busId} ({issue.busRoute})</span>
+                      <span className="text-cyan-300 font-bold truncate block">
+                        {issue.busId} ({issue.route || issue.busRoute})
+                      </span>
                     </div>
                     <div>
-                      <span className="text-slate-500 block text-[10px]">Mapped Coordinates:</span>
-                      {hasValidGps ? (
-                        <span className="text-emerald-400 font-mono text-[10px]">
-                          Lat: {issue.lat.toFixed(6)}° N, Lng: {issue.lng.toFixed(6)}° E
-                        </span>
-                      ) : (
-                        <span className="text-amber-400/90 font-mono text-[10px] italic">
-                          Location not selected
-                        </span>
-                      )}
+                      <span className="text-slate-500 block text-[10px]">Mapped Coordinates / Location:</span>
+                      <span className="text-emerald-400 font-mono text-[10px] break-all block" title={issue.userEnteredLocation || issue.locationName}>
+                        {issue.userEnteredLocation || (hasValidGps ? `Lat: ${issue.lat.toFixed(6)}° N, Lng: ${issue.lng.toFixed(6)}° E` : issue.locationName)}
+                      </span>
                     </div>
                   </div>
                 </div>

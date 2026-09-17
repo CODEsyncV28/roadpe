@@ -215,7 +215,13 @@ export const UploadInterfaceModal: React.FC<UploadInterfaceModalProps> = ({
   const [attachedGMapLocation, setAttachedGMapLocation] = useState<ParsedGoogleMapsLocation>(() =>
     parseGoogleMapsInput('')
   );
-  const [isLocationAttached, setIsLocationAttached] = useState<boolean>(false);
+  const [isLocationAttached, setIsLocationAttached] = useState<boolean>(true);
+  const [locationValidationError, setLocationValidationError] = useState<string | null>(null);
+
+  // Per-upload metadata capture (strictly independent)
+  const [capturedUploadTimestamp, setCapturedUploadTimestamp] = useState<string>('');
+  const [capturedSourceFile, setCapturedSourceFile] = useState<string>('');
+  const [capturedLocation, setCapturedLocation] = useState<string>('');
 
   // Generated Bus Route State
   const [generatedRouteData, setGeneratedRouteData] = useState<{
@@ -233,6 +239,7 @@ export const UploadInterfaceModal: React.FC<UploadInterfaceModalProps> = ({
   const [processedDetections, setProcessedDetections] = useState<RoadIssue[] | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const locationInputRef = useRef<HTMLInputElement | null>(null);
 
   // Parse Google Maps Location handler
   const handleParseLocation = async (customVal?: string) => {
@@ -288,6 +295,7 @@ export const UploadInterfaceModal: React.FC<UploadInterfaceModalProps> = ({
   const handleSelectLandmark = (landmark: typeof PRESET_GMAP_LANDMARKS[0]) => {
     const gUrl = `https://maps.google.com/?q=${landmark.lat},${landmark.lng}`;
     setGoogleMapsInput(gUrl);
+    setLocationValidationError(null);
     const parsed: ParsedGoogleMapsLocation = {
       lat: landmark.lat,
       lng: landmark.lng,
@@ -331,10 +339,37 @@ export const UploadInterfaceModal: React.FC<UploadInterfaceModalProps> = ({
     }, 500);
   };
 
-  // Handle local file selection
+  // Trigger file selection with strict location validation
+  const triggerFileSelect = () => {
+    if (!googleMapsInput.trim()) {
+      setLocationValidationError('Please enter a location or map link before uploading the image.');
+      locationInputRef.current?.focus();
+      return;
+    }
+    setLocationValidationError(null);
+    fileInputRef.current?.click();
+  };
+
+  // Handle local file selection with validation and timestamp capture
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    if (!googleMapsInput.trim()) {
+      setLocationValidationError('Please enter a location or map link before uploading the image.');
+      if (e.target) e.target.value = '';
+      locationInputRef.current?.focus();
+      return;
+    }
+    setLocationValidationError(null);
+
+    // Capture website timestamp at the exact moment of upload!
+    const uploadDate = new Date();
+    const uploadTimestampStr = `${uploadDate.toISOString().split('T')[0]} ${uploadDate.toLocaleTimeString('en-IN', { hour12: false })} IST`;
+
+    setCapturedUploadTimestamp(uploadTimestampStr);
+    setCapturedSourceFile(file.name);
+    setCapturedLocation(googleMapsInput.trim());
 
     // Reset stale state completely
     setProcessedDetections(null);
@@ -348,6 +383,44 @@ export const UploadInterfaceModal: React.FC<UploadInterfaceModalProps> = ({
 
     // Required Debug Logging 1: Uploaded filename/ID
     console.log('[Frontend Upload] 1. Uploaded filename/ID:', file.name, `(${newUploadId})`);
+    console.log('[Frontend Upload] 2. Timestamp captured at upload moment:', uploadTimestampStr);
+    console.log('[Frontend Upload] 3. Location entered by user:', googleMapsInput.trim());
+
+    const isVid = file.type.startsWith('video') || file.name.endsWith('.mp4') || file.name.endsWith('.mov');
+    setFileInputType(isVid ? 'video' : 'image');
+
+    const objUrl = URL.createObjectURL(file);
+    setPreviewMediaUrl(objUrl);
+  };
+
+  // Drag & drop handlers
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    if (!googleMapsInput.trim()) {
+      setLocationValidationError('Please enter a location or map link before uploading the image.');
+      locationInputRef.current?.focus();
+      return;
+    }
+    setLocationValidationError(null);
+
+    const file = e.dataTransfer.files?.[0];
+    if (!file) return;
+
+    const uploadDate = new Date();
+    const uploadTimestampStr = `${uploadDate.toISOString().split('T')[0]} ${uploadDate.toLocaleTimeString('en-IN', { hour12: false })} IST`;
+
+    setCapturedUploadTimestamp(uploadTimestampStr);
+    setCapturedSourceFile(file.name);
+    setCapturedLocation(googleMapsInput.trim());
+
+    setProcessedDetections(null);
+    setProcessedResultImageUrl(null);
+    setProcessingError(null);
+    setActiveSample(null);
+
+    const newUploadId = `upload_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+    setUploadId(newUploadId);
+    setSelectedFile(file);
 
     const isVid = file.type.startsWith('video') || file.name.endsWith('.mp4') || file.name.endsWith('.mov');
     setFileInputType(isVid ? 'video' : 'image');
@@ -376,6 +449,12 @@ export const UploadInterfaceModal: React.FC<UploadInterfaceModalProps> = ({
       return;
     }
 
+    if (selectedFile && !googleMapsInput.trim() && !capturedLocation) {
+      setLocationValidationError('Please enter a location or map link before uploading the image.');
+      locationInputRef.current?.focus();
+      return;
+    }
+
     setIsProcessing(true);
     setProcessingError(null);
     setProcessedDetections(null);
@@ -383,20 +462,22 @@ export const UploadInterfaceModal: React.FC<UploadInterfaceModalProps> = ({
     setProcessingPercent(15);
     setProcessingStage('Ingesting media into edge decode buffer...');
 
-    // LOCATION SYNCHRONIZATION: Ensure effective location is parsed and synchronized for all upload modes
-    let effectiveLocation = attachedGMapLocation;
-    let effectiveIsAttached = isLocationAttached;
+    const userEnteredLocation = (googleMapsInput.trim() || capturedLocation || '').trim();
+    const eventUploadTimestamp = capturedUploadTimestamp || `${new Date().toISOString().split('T')[0]} ${new Date().toLocaleTimeString('en-IN', { hour12: false })} IST`;
 
-    if (googleMapsInput.trim()) {
-      const autoParsed = parseGoogleMapsInput(googleMapsInput.trim());
-      if (autoParsed.isValid) {
-        effectiveLocation = autoParsed;
-        effectiveIsAttached = true;
-        setAttachedGMapLocation(autoParsed);
-        setIsLocationAttached(true);
-        console.log('[Frontend Upload] Auto-parsed location from input field:', autoParsed);
-      }
-    }
+    // Parse coordinates if user provided Google Maps link/coords, otherwise keep exact string
+    let parsedUserLoc = parseGoogleMapsInput(userEnteredLocation);
+    const hasValidCoords = Boolean(
+      parsedUserLoc.isValid &&
+      typeof parsedUserLoc.lat === 'number' &&
+      typeof parsedUserLoc.lng === 'number' &&
+      (parsedUserLoc.lat !== 0 || parsedUserLoc.lng !== 0)
+    );
+    const extractedLat = hasValidCoords ? parsedUserLoc.lat : 0;
+    const extractedLng = hasValidCoords ? parsedUserLoc.lng : 0;
+
+    let effectiveLocation = parsedUserLoc;
+    let effectiveIsAttached = Boolean(userEnteredLocation);
 
     if (selectedFile) {
       const activeUploadId = uploadId || `upload_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
@@ -409,33 +490,23 @@ export const UploadInterfaceModal: React.FC<UploadInterfaceModalProps> = ({
         formData.append('image', selectedFile);
         formData.append('file', selectedFile);
         formData.append('uploadId', activeUploadId);
+        formData.append('sourceFile', selectedFile.name);
+        formData.append('uploadTimestamp', eventUploadTimestamp);
+        formData.append('userEnteredLocation', userEnteredLocation);
+        formData.append('locationName', userEnteredLocation);
+        formData.append('locationSelected', 'true');
+        formData.append('lat', String(extractedLat));
+        formData.append('lng', String(extractedLng));
+        formData.append('busId', customBusId || 'BUS-07');
+        formData.append('busRoute', selectedCorridor);
+        formData.append('route', selectedCorridor);
 
-        const hasValidCoords = Boolean(
-          effectiveIsAttached &&
-          effectiveLocation.isValid &&
-          typeof effectiveLocation.lat === 'number' &&
-          typeof effectiveLocation.lng === 'number' &&
-          (effectiveLocation.lat !== 0 || effectiveLocation.lng !== 0)
-        );
+        if (parsedUserLoc.city) formData.append('city', parsedUserLoc.city);
+        if (parsedUserLoc.state) formData.append('state', parsedUserLoc.state);
+        if (parsedUserLoc.country) formData.append('country', parsedUserLoc.country);
+        if (parsedUserLoc.googleMapsUrl) formData.append('googleMapsUrl', parsedUserLoc.googleMapsUrl);
 
-        if (hasValidCoords) {
-          formData.append('locationSelected', 'true');
-          formData.append('lat', String(effectiveLocation.lat));
-          formData.append('lng', String(effectiveLocation.lng));
-          formData.append('locationName', effectiveLocation.name);
-          if (effectiveLocation.city) formData.append('city', effectiveLocation.city);
-          if (effectiveLocation.state) formData.append('state', effectiveLocation.state);
-          if (effectiveLocation.country) formData.append('country', effectiveLocation.country);
-          if (effectiveLocation.address) formData.append('address', effectiveLocation.address);
-          if (effectiveLocation.googleMapsUrl) formData.append('googleMapsUrl', effectiveLocation.googleMapsUrl);
-          console.log(`[STAGE 1 - LOCATION TRANSMITTED] Lat: ${effectiveLocation.lat}, Lng: ${effectiveLocation.lng}, Name: "${effectiveLocation.name}"`);
-        } else {
-          formData.append('locationSelected', 'false');
-          formData.append('lat', '0');
-          formData.append('lng', '0');
-          formData.append('locationName', 'Location not selected');
-          console.log('[STAGE 1 - LOCATION TRANSMITTED] No location attached (Location not selected)');
-        }
+        console.log(`[STAGE 1 - LOCATION TRANSMITTED] Lat: ${extractedLat}, Lng: ${extractedLng}, Location: "${userEnteredLocation}", Timestamp: "${eventUploadTimestamp}"`);
 
         console.log('[Frontend Upload] Calling POST /api/detect-hazard...');
         setProcessingPercent(60);
@@ -496,88 +567,69 @@ export const UploadInterfaceModal: React.FC<UploadInterfaceModalProps> = ({
           return;
         }
 
-        const hasLocation = Boolean(
-          data.hasSelectedLocation || 
-          hasValidCoords ||
-          (data.location && (data.location.latitude !== 0 || data.location.longitude !== 0))
-        );
-
-        const resolvedLat = hasLocation
-          ? (data.location?.latitude ?? effectiveLocation.lat)
-          : 0;
-        const resolvedLng = hasLocation
-          ? (data.location?.longitude ?? effectiveLocation.lng)
-          : 0;
-        const resolvedLocName = hasLocation
-          ? (data.locationName || effectiveLocation.name || (data.location?.address || `${resolvedLat.toFixed(6)}°, ${resolvedLng.toFixed(6)}°`))
-          : 'Location not selected';
-        const resolvedCity = hasLocation
-          ? (data.location?.city || effectiveLocation.city || '')
-          : '';
-        const resolvedState = hasLocation
-          ? (data.location?.state || effectiveLocation.state || '')
-          : '';
-        const resolvedCountry = hasLocation
-          ? (data.location?.country || effectiveLocation.country || '')
-          : '';
+        const resolvedLat = hasValidCoords
+          ? extractedLat
+          : (data.location?.latitude && data.location.latitude !== 0 ? data.location.latitude : 0);
+        const resolvedLng = hasValidCoords
+          ? extractedLng
+          : (data.location?.longitude && data.location.longitude !== 0 ? data.location.longitude : 0);
+        const resolvedLocName = userEnteredLocation || data.locationName || 'Location not selected';
+        const resolvedCity = parsedUserLoc.city || data.location?.city || '';
+        const resolvedState = parsedUserLoc.state || data.location?.state || '';
+        const resolvedCountry = parsedUserLoc.country || data.location?.country || 'India';
 
         setProcessingPercent(85);
-        setProcessingStage(hasLocation ? `Mapping detection metadata to ${resolvedCity || resolvedLocName}...` : 'Formatting detection metadata...');
-
-        const nowStr = new Date().toLocaleTimeString('en-IN', { hour12: false }) + ' IST';
-        const todayDate = new Date().toISOString().split('T')[0];
+        setProcessingStage(`Mapping detection metadata to ${resolvedLocName}...`);
 
         // Map backend detections into RoadIssue structure
         let newIssues: RoadIssue[] = (data.detections || []).map((det: any, idx: number) => {
           const backendProblem = data.problems && data.problems[idx];
           const newId = backendProblem?.id || det.id || `DET-${Math.floor(9300 + Math.random() * 600)}`;
-          const timestampStr = `${todayDate} ${nowStr}`;
-
-          // Exact coordinates without offsets
-          const issueLat = hasLocation ? resolvedLat : 0;
-          const issueLng = hasLocation ? resolvedLng : 0;
 
           const assignedCorridor = generatedRouteData
             ? generatedRouteData.route.routeName
-            : (resolvedCity ? `${resolvedCity} Transit Survey Corridor` : (hasLocation ? `${resolvedLocName} Corridor` : selectedCorridor));
+            : selectedCorridor;
 
           return {
             id: newId,
             type: (det.class as IssueType) || 'pothole',
+            detectionType: det.class || 'pothole',
             title: det.title || (backendProblem?.title) || `Detected ${String(det.class).toUpperCase()} on Roadway`,
             locationName: resolvedLocName,
-            lat: issueLat,
-            lng: issueLng,
-            hasSelectedLocation: hasLocation,
-            location: hasLocation ? {
-              latitude: issueLat,
-              longitude: issueLng,
+            userEnteredLocation: userEnteredLocation,
+            sourceFile: selectedFile.name,
+            uploadTimestamp: eventUploadTimestamp,
+            lat: resolvedLat,
+            lng: resolvedLng,
+            latitude: hasValidCoords ? resolvedLat : undefined,
+            longitude: hasValidCoords ? resolvedLng : undefined,
+            hasSelectedLocation: true,
+            location: {
+              latitude: resolvedLat,
+              longitude: resolvedLng,
               city: resolvedCity,
               state: resolvedState,
               country: resolvedCountry,
               address: resolvedLocName,
-              formattedAddress: effectiveLocation.formattedAddress || resolvedLocName,
-            } : undefined,
-            googleMapsUrl: hasLocation ? (effectiveLocation.googleMapsUrl || `https://www.google.com/maps?q=${issueLat.toFixed(6)},${issueLng.toFixed(6)}`) : undefined,
-            attachedLocationMethod: hasLocation
-              ? (effectiveLocation.sourceType === 'URL_QUERY' || effectiveLocation.sourceType === 'URL_COORDINATE_PATH'
-                ? 'GOOGLE_MAPS_LINK'
-                : 'COORDINATES')
-              : undefined,
+              formattedAddress: parsedUserLoc.formattedAddress || resolvedLocName,
+            },
+            googleMapsUrl: parsedUserLoc.googleMapsUrl || (hasValidCoords ? `https://www.google.com/maps?q=${resolvedLat.toFixed(6)},${resolvedLng.toFixed(6)}` : undefined),
+            attachedLocationMethod: hasValidCoords ? 'GOOGLE_MAPS_LINK' : 'COORDINATES',
             generatedBusRoute: generatedRouteData ? generatedRouteData.route : undefined,
             severity: det.severity || 'HIGH',
             confidence: det.confidence || 94.0,
-            busId: generatedRouteData ? generatedRouteData.bus.id : (customBusId || 'BUS-07'),
+            busId: customBusId || 'BUS-07',
             busRoute: assignedCorridor,
-            timestamp: timestampStr,
-            videoTimestamp: 'Uploaded Frame',
+            route: assignedCorridor,
+            timestamp: eventUploadTimestamp,
+            videoTimestamp: eventUploadTimestamp,
             sourceMedia: {
               fileName: selectedFile.name,
               fileType: fileInputType,
-              busIdTag: customBusId || (generatedRouteData ? generatedRouteData.bus.id : 'BUS-07'),
+              busIdTag: customBusId || 'BUS-07',
               corridor: assignedCorridor,
-              uploadTime: timestampStr,
-              locationMappingMethod: hasLocation ? 'GOOGLE_MAPS_ATTACHMENT' : 'LOCATION_NOT_SELECTED',
+              uploadTime: eventUploadTimestamp,
+              locationMappingMethod: 'GOOGLE_MAPS_ATTACHMENT',
             },
             status: 'Pending',
             verification: 'Pending Verification',
@@ -842,13 +894,16 @@ export const UploadInterfaceModal: React.FC<UploadInterfaceModalProps> = ({
             
             {/* Left: Upload Dropzone (7/12 cols) */}
             <div className="lg:col-span-7 space-y-3">
-              <label className="text-slate-300 font-bold block text-[11px]">
-                1. Select or Upload Road Footage (Video / Image):
+              <label className="text-slate-300 font-bold block text-[11px] flex items-center justify-between">
+                <span>Select or Upload Road Footage (Video / Image):</span>
+                <span className="text-cyan-400 text-[10px]">Location Required First</span>
               </label>
 
               {/* Drag & Drop Area */}
               <div 
-                onClick={() => fileInputRef.current?.click()}
+                onClick={triggerFileSelect}
+                onDrop={handleDrop}
+                onDragOver={(e) => e.preventDefault()}
                 className={`p-5 rounded-xl border-2 border-dashed transition-all cursor-pointer flex flex-col items-center justify-center text-center group ${
                   selectedFile
                     ? 'bg-cyan-950/30 border-cyan-500/80 shadow-[0_0_20px_rgba(6,182,212,0.15)]'
@@ -872,13 +927,23 @@ export const UploadInterfaceModal: React.FC<UploadInterfaceModalProps> = ({
                 </div>
 
                 {selectedFile ? (
-                  <div>
+                  <div className="space-y-1">
                     <span className="font-bold text-cyan-300 text-xs block mb-0.5">
                       ✓ {selectedFile.name}
                     </span>
-                    <span className="text-slate-400 text-[10px]">
+                    <span className="text-slate-400 text-[10px] block">
                       {(selectedFile.size / (1024 * 1024)).toFixed(1)} MB • Click to replace file
                     </span>
+                    {capturedUploadTimestamp && (
+                      <span className="text-amber-300 text-[10px] font-mono block">
+                        ⏱️ Upload Time: {capturedUploadTimestamp}
+                      </span>
+                    )}
+                    {(capturedLocation || googleMapsInput.trim()) && (
+                      <span className="text-emerald-400 text-[10px] font-mono block truncate max-w-sm">
+                        📍 Location: {capturedLocation || googleMapsInput.trim()}
+                      </span>
+                    )}
                   </div>
                 ) : activeSample ? (
                   <div>
@@ -975,27 +1040,39 @@ export const UploadInterfaceModal: React.FC<UploadInterfaceModalProps> = ({
                   </label>
                 </div>
 
+                {/* Validation Error Message */}
+                {locationValidationError && (
+                  <div className="p-3 rounded-lg bg-rose-950/90 border border-rose-500 text-rose-200 text-xs font-mono flex items-center gap-2.5 animate-fadeIn shadow-[0_0_15px_rgba(244,63,94,0.25)]">
+                    <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+                    <span className="font-semibold">{locationValidationError}</span>
+                  </div>
+                )}
+
                 {isLocationAttached && (
                   <div className="space-y-3 pt-1">
                     {/* Input row */}
                     <div>
                       <label className="text-slate-300 text-[11px] font-semibold block mb-1">
-                        Google Maps URL, Place Link, or Latitude/Longitude Coordinates:
+                        Location / Map Link (Source of Truth):
                       </label>
                       <div className="flex flex-col sm:flex-row gap-2">
                         <div className="relative flex-1">
                           <Compass className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
                           <input
+                            ref={locationInputRef}
                             type="text"
                             value={googleMapsInput}
                             onChange={(e) => {
                               setGoogleMapsInput(e.target.value);
+                              if (locationValidationError) setLocationValidationError(null);
                             }}
                             onKeyDown={(e) => {
                               if (e.key === 'Enter') handleParseLocation();
                             }}
-                            placeholder="e.g. https://maps.google.com/?q=21.7160,72.9920 or 21.7160, 72.9920"
-                            className="w-full pl-9 pr-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-500 font-mono"
+                            placeholder="e.g. Station Road, Bharuch or https://maps.google.com/?q=21.7051,72.9959"
+                            className={`w-full pl-9 pr-3 py-2 rounded-lg bg-slate-950 border text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-500 font-mono transition-colors ${
+                              locationValidationError ? 'border-rose-500 ring-1 ring-rose-500' : 'border-slate-700'
+                            }`}
                           />
                         </div>
                         <button
@@ -1262,19 +1339,49 @@ export const UploadInterfaceModal: React.FC<UploadInterfaceModalProps> = ({
 
           </div>
 
-          {/* Section 2: Timeline GPS Mapping Registry (How Timestamps Map to Bharuch Coordinates) */}
-          <div className="p-3.5 rounded-xl bg-[#070b14] border border-slate-800 space-y-2">
-            <div className="flex items-center justify-between">
+          {/* Section 2: Timeline GPS Coordinate Mapping */}
+          <div className="p-3.5 rounded-xl bg-[#070b14] border border-cyan-800/60 shadow-[0_0_20px_rgba(6,182,212,0.1)] space-y-3">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-2">
               <div className="flex items-center gap-2">
                 <MapPin className="w-4 h-4 text-cyan-400" />
                 <span className="font-bold text-slate-200 text-xs uppercase tracking-wider">
-                  Timeline GPS Mapping Registry (Bharuch Corridor Coordinates)
+                  Timeline GPS Coordinate Mapping
                 </span>
               </div>
               <span className="text-[10px] text-slate-400">
                 Synchronized Video Timeline ➔ Road Registry GPS
               </span>
             </div>
+
+            {/* After upload, display the 4 required fields */}
+            {(selectedFile || capturedSourceFile) && (
+              <div className="p-3 rounded-lg bg-[#0a1220] border border-cyan-700/80 shadow-[0_0_15px_rgba(6,182,212,0.15)] grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs font-mono animate-fadeIn">
+                <div className="space-y-0.5">
+                  <span className="text-slate-400 block text-[10px] uppercase font-bold">Source Footage File:</span>
+                  <span className="text-slate-100 font-bold break-all block">
+                    {capturedSourceFile || selectedFile?.name}
+                  </span>
+                </div>
+                <div className="space-y-0.5">
+                  <span className="text-slate-400 block text-[10px] uppercase font-bold">Video/Image Timestamp Mark:</span>
+                  <span className="text-amber-300 font-bold block">
+                    ⏱️ {capturedUploadTimestamp || 'Captured at upload'}
+                  </span>
+                </div>
+                <div className="space-y-0.5">
+                  <span className="text-slate-400 block text-[10px] uppercase font-bold">Transit Vehicle Tag:</span>
+                  <span className="text-cyan-300 font-bold block">
+                    {customBusId || 'BUS-07'} ({selectedCorridor})
+                  </span>
+                </div>
+                <div className="space-y-0.5">
+                  <span className="text-slate-400 block text-[10px] uppercase font-bold">Mapped Coordinates / Location:</span>
+                  <span className="text-emerald-400 font-bold break-all block">
+                    📍 {capturedLocation || googleMapsInput.trim() || 'Location entered by user'}
+                  </span>
+                </div>
+              </div>
+            )}
 
             <p className="text-[11px] text-slate-400 leading-relaxed">
               Because public bus dashcams record locally to internal solid-state media before depot sync, the AI model pinpoints timestamp marks in the supplied video and indexes against the surveyed transit route registry:
@@ -1400,15 +1507,15 @@ export const UploadInterfaceModal: React.FC<UploadInterfaceModalProps> = ({
                 </span>
               </div>
 
-              <div className="space-y-2">
+              <div className="space-y-2.5">
                 {processedDetections.map((det) => (
                   <div 
                     key={det.id}
-                    className="p-2.5 rounded-lg bg-slate-950 border border-slate-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-xs"
+                    className="p-3 rounded-lg bg-slate-950 border border-slate-800 space-y-2 text-xs"
                   >
-                    <div>
-                      <div className="flex items-center gap-2 mb-0.5">
-                        <span className="font-bold text-cyan-400">{det.id}</span>
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-slate-900 pb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-cyan-400 font-mono">{det.id}</span>
                         <span className="text-slate-600">•</span>
                         <span className="font-semibold text-slate-200">{det.title}</span>
                         <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${
@@ -1417,16 +1524,30 @@ export const UploadInterfaceModal: React.FC<UploadInterfaceModalProps> = ({
                           {det.severity}
                         </span>
                       </div>
-                      <div className="text-[11px] text-slate-400 flex items-center gap-2">
-                        <span>📍 {det.locationName}</span>
-                        <span>•</span>
-                        <span className="text-amber-300 font-mono">Timestamp: {det.videoTimestamp}</span>
+                      <div className="text-right shrink-0">
+                        <span className="text-cyan-300 font-bold font-mono">{det.confidence}% Conf</span>
                       </div>
                     </div>
 
-                    <div className="text-right shrink-0">
-                      <span className="text-cyan-300 font-bold block">{det.confidence}% Conf</span>
-                      <span className="text-[10px] text-slate-500">Bus: {det.busId}</span>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-[11px] font-mono">
+                      <div>
+                        <span className="text-slate-500 block text-[10px]">Location:</span>
+                        <span className="text-emerald-400 font-semibold break-all">📍 {det.userEnteredLocation || det.locationName}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 block text-[10px]">Upload Timestamp:</span>
+                        <span className="text-amber-300 font-semibold">⏱️ {det.uploadTimestamp || det.timestamp}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 block text-[10px]">Transit Tag:</span>
+                        <span className="text-slate-300 font-semibold">{det.busId} • {det.busRoute || det.route}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 block text-[10px]">Source Media:</span>
+                        <span className="text-slate-300 font-semibold truncate block" title={det.sourceFile || selectedFile?.name}>
+                          {det.sourceFile || selectedFile?.name || 'Uploaded File'}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 ))}

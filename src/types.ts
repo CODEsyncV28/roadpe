@@ -132,6 +132,13 @@ export interface RoadIssue {
   };
   // Uploaded media & timeline tracking
   sourceMedia?: SourceMedia;
+  sourceFile?: string;
+  uploadTimestamp?: string;
+  userEnteredLocation?: string;
+  latitude?: number;
+  longitude?: number;
+  detectionType?: string;
+  route?: string;
   videoTimestamp?: string; // e.g. "00:14 in uploaded clip"
   googleMapsUrl?: string;
   attachedLocationMethod?: 'GOOGLE_MAPS_LINK' | 'COORDINATES' | 'LANDMARK_SEARCH' | 'MAP_PIN' | 'TIMELINE_MAPPING';
