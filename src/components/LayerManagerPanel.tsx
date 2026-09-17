@@ -52,7 +52,7 @@ export const LayerManagerPanel: React.FC<LayerManagerPanelProps> = ({
   const isTrackingTab = activeLayer === 'MAINTENANCE_LAYER' || activeLayer === 'ASSIGN_TRACKING';
 
   return (
-    <div className="bg-[#090e1a]/95 backdrop-blur-md border-t border-cyan-950/80 px-4 py-3 select-none text-xs font-mono shrink-0 shadow-2xl relative z-10">
+    <div className="bg-[#090e1a]/85 backdrop-blur-md border-t border-cyan-950/80 px-4 py-3 select-none text-xs font-mono shrink-0 shadow-2xl relative z-10">
       
       {/* Workflow Stage Header */}
       <div className="flex items-center justify-between gap-2 mb-2.5 pb-2 border-b border-slate-800">
@@ -186,7 +186,7 @@ export const LayerManagerPanel: React.FC<LayerManagerPanelProps> = ({
                 <div
                   key={item.id}
                   onClick={() => onSelectIssue(item)}
-                  className={`p-2.5 rounded-lg border transition-all cursor-pointer w-84 flex flex-col justify-between shadow-sm ${
+                  className={`p-2.5 rounded-lg border transition-all cursor-pointer w-88 flex flex-col justify-between shadow-sm ${
                     isVerified
                       ? 'bg-[#08121a] border-emerald-800/70 hover:border-emerald-500'
                       : isRejected
@@ -214,32 +214,56 @@ export const LayerManagerPanel: React.FC<LayerManagerPanelProps> = ({
                     </span>
                   </div>
 
-                  <div className="flex items-center gap-2 mb-2">
-                    {item.evidenceImage && (
-                      <img
-                        src={item.evidenceImage}
-                        alt={item.title}
-                        className="w-12 h-9 rounded object-cover border border-slate-800 shrink-0"
-                      />
+                  {/* Primary Visual: Stored Problem Evidence Image with Exact Coordinates */}
+                  <div className="relative h-32 rounded overflow-hidden bg-slate-950 border border-slate-800 mb-2 group">
+                    <img
+                      src={item.evidenceImage}
+                      alt={item.title}
+                      className="w-full h-full object-cover"
+                    />
+                    <div className="absolute bottom-1.5 left-1.5 px-1.5 py-0.5 rounded bg-black/80 backdrop-blur-md text-[9px] font-mono text-cyan-300 border border-slate-800">
+                      📍 {item.lat.toFixed(4)}°, {item.lng.toFixed(4)}°
+                    </div>
+                    {item.googleMapsUrl && (
+                      <a
+                        href={item.googleMapsUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded bg-black/80 backdrop-blur-md hover:bg-black text-[9px] font-mono text-slate-300 hover:text-cyan-300 border border-slate-700 transition-colors"
+                        title="Open stored coordinates in Google Maps"
+                      >
+                        Map ↗
+                      </a>
                     )}
-                    <div className="min-w-0 flex-1">
-                      <div className="text-slate-200 font-sans font-semibold text-[11px] truncate">
-                        {item.title}
-                      </div>
-                      <div className="text-[10px] text-slate-400 truncate">
-                        📍 {item.locationName} &bull; <span className="text-cyan-300 font-mono">{item.confidence}%</span>
-                      </div>
+                  </div>
+
+                  <div className="space-y-1 mb-2">
+                    <div className="text-slate-200 font-sans font-semibold text-[11px] truncate">
+                      {item.title}
+                    </div>
+                    <div className="text-[10px] text-slate-400 truncate flex items-center gap-1">
+                      <span>📍 {item.locationName}</span>
+                    </div>
+                    <div className="text-[10px] text-cyan-300 font-mono flex items-center justify-between pt-0.5">
+                      <span>AI Confidence: <strong className="text-cyan-200">{item.confidence}%</strong></span>
+                      {item.lat !== undefined && item.lng !== undefined && (
+                        <span className="text-slate-500 text-[9px]">
+                          {item.lat.toFixed(4)}°, {item.lng.toFixed(4)}°
+                        </span>
+                      )}
                     </div>
                   </div>
 
+                  {/* Only display assigned if an assignment genuinely exists in the database */}
                   {item.assignedAuthority && (
-                    <div className="text-[10px] text-indigo-300 mb-1.5 truncate flex items-center gap-1">
+                    <div className="text-[10px] text-indigo-300 mb-2 truncate flex items-center gap-1 bg-indigo-950/40 px-2 py-0.5 rounded border border-indigo-800/40">
                       <Building2 className="w-3 h-3 text-indigo-400 shrink-0" />
                       <span>Assigned: <strong>{item.assignedAuthority}</strong></span>
                     </div>
                   )}
 
-                  {/* Actions: View, Verify, Reject, Assign Problem */}
+                  {/* Actions: Review, Verify, Reject, View - STRICTLY NO ASSIGN BUTTON HERE */}
                   <div className="flex items-center justify-between text-[10px] pt-1.5 border-t border-slate-800/80 gap-1.5">
                     <div className="flex items-center gap-1">
                       {!isVerified && onVerifyProblem && (
@@ -249,10 +273,10 @@ export const LayerManagerPanel: React.FC<LayerManagerPanelProps> = ({
                             e.stopPropagation();
                             onVerifyProblem(item.id);
                           }}
-                          className="px-2 py-0.5 rounded bg-emerald-700/80 hover:bg-emerald-600 text-slate-950 font-bold transition-colors flex items-center gap-0.5 cursor-pointer"
+                          className="px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold text-[10px] transition-all flex items-center gap-1 cursor-pointer active:scale-95 shadow-sm"
                           title="Verify detection"
                         >
-                          <CheckCircle2 className="w-3 h-3" />
+                          <CheckCircle2 className="w-3.5 h-3.5" />
                           <span>Verify</span>
                         </button>
                       )}
@@ -263,8 +287,8 @@ export const LayerManagerPanel: React.FC<LayerManagerPanelProps> = ({
                             e.stopPropagation();
                             onRejectProblem(item.id);
                           }}
-                          className="px-2 py-0.5 rounded bg-rose-950/80 hover:bg-rose-900 text-rose-300 border border-rose-800 text-[10px] transition-colors cursor-pointer"
-                          title="Reject as false positive"
+                          className="px-2 py-1 rounded bg-rose-950/80 hover:bg-rose-900 text-rose-300 border border-rose-800 text-[10px] transition-colors cursor-pointer"
+                          title="Reject detection as false positive"
                         >
                           Reject
                         </button>
@@ -272,27 +296,14 @@ export const LayerManagerPanel: React.FC<LayerManagerPanelProps> = ({
                     </div>
 
                     <div className="flex items-center gap-1">
-                      {onOpenAssignModal && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onOpenAssignModal(item);
-                          }}
-                          className="px-2 py-0.5 rounded bg-cyan-600 hover:bg-cyan-500 text-slate-950 font-bold transition-all flex items-center gap-1 cursor-pointer shadow-sm active:scale-95"
-                          title="Open assignment modal"
-                        >
-                          <Send className="w-3 h-3" />
-                          <span>Assign Problem</span>
-                        </button>
-                      )}
                       <button
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
                           onSelectIssue(item);
                         }}
-                        className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] transition-colors"
+                        className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px] transition-colors border border-slate-700 cursor-pointer"
+                        title="View problem details and AI detection evidence"
                       >
                         View
                       </button>
@@ -311,7 +322,7 @@ export const LayerManagerPanel: React.FC<LayerManagerPanelProps> = ({
             <div className="flex flex-col gap-2 relative">
               <div className="text-[11px] text-slate-400 font-bold uppercase tracking-wider sticky left-0 px-1 pt-1 bg-[#090e1a]/95 backdrop-blur-md">Active Problem Status</div>
               <div className="flex items-center gap-2.5">
-                {issues.filter(i => (i.verification === 'VERIFIED' || i.verification === 'Verified' || i.verification === 'Verified by Staff' || i.verification === 'AUTHORITY_OVERRIDE' || i.verification === 'Authority Override') && !isSolved(i.status) && !(i.verification === 'FALSE_POSITIVE' || i.verification === 'False Positive')).map((item) => {
+                {issues.filter(i => (i.verification === 'VERIFIED' || i.verification === 'Verified' || i.verification === 'Verified by Staff' || i.verification === 'AUTHORITY_OVERRIDE' || i.verification === 'Authority Override') && !isSolved(i.status) && !(i.verification === 'FALSE_POSITIVE' || i.verification === 'False Positive' || i.verification === 'Rejected' || i.verification === 'REJECTED' || i.status === 'Rejected' || i.status === 'False Positive' || i.status === 'FALSE_POSITIVE')).map((item) => {
                   const solved = isSolved(item.status);
                   const inProgress = isInProgress(item.status);
                   const pending = isPending(item.status);
@@ -351,38 +362,46 @@ export const LayerManagerPanel: React.FC<LayerManagerPanelProps> = ({
                         </span>
                       </div>
 
-                      <div className="text-slate-200 font-sans font-semibold text-[11px] truncate mb-1">
+                      <div className="text-slate-200 font-sans font-semibold text-[11px] truncate mb-0.5">
                         {item.title}
                       </div>
 
-                      {/* Assignment Information */}
-                      <div className="p-1.5 rounded bg-[#070b14] border border-slate-800/80 mb-2 space-y-0.5 text-[10px]">
-                        <div className="text-slate-300 flex items-center justify-between">
-                          <span className="text-slate-400 flex items-center gap-1">
-                            <Building2 className="w-3 h-3 text-cyan-400" />
-                            <span>Team:</span>
+                      <div className="text-[10px] text-slate-400 truncate mb-1.5 flex items-center gap-1">
+                        <span>📍 {item.locationName}</span>
+                      </div>
+
+                      {/* Workflow Details: Verification, Assignment, Status */}
+                      <div className="p-2 rounded bg-[#070b14] border border-slate-800/80 mb-2 space-y-1 text-[10px] font-mono">
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-400">Verification:</span>
+                          <span className="text-emerald-400 font-bold">VERIFIED</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-400">Assignment:</span>
+                          <span className={item.assignedAuthority ? 'text-indigo-300 font-bold truncate max-w-[160px]' : 'text-amber-400 font-bold'}>
+                            {item.assignedAuthority || 'UNASSIGNED'}
                           </span>
-                          <span className="text-slate-200 font-medium truncate max-w-[170px]">
-                            {item.assignedAuthority || 'Road Maintenance Team'}
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-400">Status:</span>
+                          <span className="text-cyan-300 font-bold">
+                            {item.status.toUpperCase()}
                           </span>
                         </div>
                         {item.assignedPerson && (
-                          <div className="text-slate-300 flex items-center justify-between">
-                            <span className="text-slate-400 flex items-center gap-1">
-                              <UserCheck className="w-3 h-3 text-emerald-400" />
-                              <span>Lead:</span>
-                            </span>
-                            <span className="text-slate-200 font-medium truncate max-w-[170px]">
+                          <div className="flex items-center justify-between pt-0.5 border-t border-slate-800/60">
+                            <span className="text-slate-500">Crew Lead:</span>
+                            <span className="text-slate-300 truncate max-w-[160px]">
                               {item.assignedPerson}
                             </span>
                           </div>
                         )}
                       </div>
 
-                      {/* Status Progression Controls */}
+                      {/* Status Progression Controls & Assignment Button */}
                       <div className="flex items-center justify-between text-[10px] pt-1.5 border-t border-slate-800/80 gap-1">
                         <div className="flex items-center gap-1">
-                          {pending && onUpdateStatus && (
+                          {pending && item.assignedAuthority && onUpdateStatus && (
                             <button
                               type="button"
                               onClick={(e) => {
@@ -414,10 +433,15 @@ export const LayerManagerPanel: React.FC<LayerManagerPanelProps> = ({
                                 e.stopPropagation();
                                 onOpenAssignModal(item);
                               }}
-                              className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-slate-700 transition-colors cursor-pointer"
-                              title="Assign or reassign"
+                              className={`px-2.5 py-1 rounded font-bold transition-all flex items-center gap-1 cursor-pointer shadow-sm active:scale-95 ${
+                                !item.assignedAuthority
+                                  ? 'bg-cyan-500 hover:bg-cyan-400 text-slate-950 ring-1 ring-cyan-400/50'
+                                  : 'bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-slate-700'
+                              }`}
+                              title={item.assignedAuthority ? 'Reassign problem' : 'Assign problem to department'}
                             >
-                              Reassign
+                              <Send className="w-3 h-3" />
+                              <span>{item.assignedAuthority ? 'Reassign' : 'Assign Problem'}</span>
                             </button>
                           )}
                           <button
@@ -426,7 +450,7 @@ export const LayerManagerPanel: React.FC<LayerManagerPanelProps> = ({
                               e.stopPropagation();
                               onSelectIssue(item);
                             }}
-                            className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors"
+                            className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors"
                           >
                             View
                           </button>

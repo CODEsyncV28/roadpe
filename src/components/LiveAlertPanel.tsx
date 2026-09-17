@@ -97,10 +97,10 @@ export const LiveAlertPanel: React.FC<LiveAlertPanelProps> = ({
   };
 
   return (
-    <aside className="w-full lg:w-96 xl:w-[420px] bg-[#090d16] border-l border-slate-800 flex flex-col h-full overflow-hidden select-none shrink-0 z-20">
+    <aside className="w-full lg:w-96 xl:w-[420px] bg-[#090d16]/85 backdrop-blur-md border-l border-slate-800 flex flex-col h-full overflow-hidden select-none shrink-0 z-20">
       
       {/* Top Header of Alert Panel */}
-      <div className="p-3 border-b border-slate-800 bg-[#0c121e]">
+      <div className="p-3 border-b border-slate-800 bg-[#0c121e]/85">
         <div className="flex items-center justify-between gap-2 mb-2">
           <div className="flex items-center gap-2">
             <div className="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-pulse"></div>

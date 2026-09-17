@@ -10,6 +10,7 @@ import { LayerManagerPanel } from './components/LayerManagerPanel';
 import { UploadInterfaceModal } from './components/UploadInterfaceModal';
 import { AssignProblemModal } from './components/AssignProblemModal';
 import { SolveProblemModal } from './components/SolveProblemModal';
+import { TransitNetworkBackground } from './components/TransitNetworkBackground';
 import { 
   RoadIssue, 
   BusFleet, 
@@ -102,11 +103,12 @@ export default function App() {
             };
           });
 
-          setIssues((prev) => {
-            const backendIds = new Set(backendIssues.map((b) => b.id));
-            const existingRemaining = prev.filter((i) => !backendIds.has(i.id));
-            return [...backendIssues, ...existingRemaining];
-          });
+          setIssues(backendIssues);
+          try {
+            localStorage.setItem('roadvision_issues', JSON.stringify(backendIssues));
+          } catch (e) {
+            console.error(e);
+          }
         }
       })
       .catch((err) => {
@@ -117,8 +119,23 @@ export default function App() {
   // Live Toast Notification
   const [liveToast, setLiveToast] = useState<{ id: string; title: string; busId: string; severity: Severity } | null>(null);
 
-  // Real-time Clock
-  const [currentTime, setCurrentTime] = useState('');
+  // Real-time Clock (Strictly India Standard Time - Asia/Kolkata)
+  const getISTTime = () => {
+    try {
+      const formatter = new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Asia/Kolkata',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false,
+      });
+      return `${formatter.format(new Date())} IST`;
+    } catch {
+      return `${new Date().toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour12: false })} IST`;
+    }
+  };
+
+  const [currentTime, setCurrentTime] = useState<string>(getISTTime);
 
   // Polling for auto-completed problems
   useEffect(() => {
@@ -154,11 +171,10 @@ export default function App() {
     localStorage.setItem('roadvision_issues', JSON.stringify(issues));
   }, [issues]);
 
-  // Update Clock
+  // Update Clock every second (Asia/Kolkata timezone)
   useEffect(() => {
     const updateTime = () => {
-      const now = new Date();
-      setCurrentTime(now.toLocaleTimeString('en-IN', { hour12: false }) + ' IST');
+      setCurrentTime(getISTTime());
     };
     updateTime();
     const interval = setInterval(updateTime, 1000);
@@ -217,6 +233,13 @@ export default function App() {
     setIssues((prev) => [newIssue, ...prev]);
     setSelectedIssue(newIssue);
 
+    // Persist to backend database as single source of truth
+    fetch('/api/problems', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newIssue),
+    }).catch((err) => console.warn('Problem persist note:', err));
+
     // Trigger HUD Toast
     setLiveToast({
       id: newIssue.id,
@@ -247,6 +270,15 @@ export default function App() {
   // Ingest batch of detections flagged from uploaded road video or image
   const handleIngestMultipleDetections = (newIssues: RoadIssue[], generatedRouteBus?: BusFleet) => {
     setIssues((prev) => [...newIssues, ...prev]);
+
+    // Persist batch to backend database
+    if (newIssues.length > 0) {
+      fetch('/api/problems', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newIssues),
+      }).catch((err) => console.warn('Problem batch persist note:', err));
+    }
 
     if (generatedRouteBus) {
       setBusFleet((prev) => [
@@ -332,6 +364,8 @@ export default function App() {
               ? {
                   ...i,
                   verification: 'Verified',
+                  status: data.problem.status || 'Pending',
+                  assignedAuthority: data.problem.assignedAuthority || undefined,
                   authorityNotes: data.problem.authorityNotes,
                   workflowHistory: data.problem.workflowHistory,
                 }
@@ -344,6 +378,8 @@ export default function App() {
               ? {
                   ...prev,
                   verification: 'Verified',
+                  status: data.problem.status || 'Pending',
+                  assignedAuthority: data.problem.assignedAuthority || undefined,
                   authorityNotes: data.problem.authorityNotes,
                   workflowHistory: data.problem.workflowHistory,
                 }
@@ -357,10 +393,10 @@ export default function App() {
     }
     // Optimistic fallback
     setIssues((prev) =>
-      prev.map((i) => (i.id === issueId ? { ...i, verification: 'Verified' } : i))
+      prev.map((i) => (i.id === issueId ? { ...i, verification: 'Verified', status: 'Pending' } : i))
     );
     if (selectedIssue?.id === issueId) {
-      setSelectedIssue((prev) => (prev ? { ...prev, verification: 'Verified' } : null));
+      setSelectedIssue((prev) => (prev ? { ...prev, verification: 'Verified', status: 'Pending' } : null));
     }
   };
 
@@ -619,8 +655,11 @@ export default function App() {
   };
 
   return (
-    <div className="flex flex-col h-screen w-screen overflow-hidden bg-[#080b11] text-slate-100 font-sans antialiased">
+    <div className="flex flex-col h-screen w-screen overflow-hidden bg-[#060a13] text-slate-100 font-sans antialiased relative">
       
+      {/* 0. Decorative Animated Transit Network Background Layer (Faint Watermark, Pointer-Events None) */}
+      <TransitNetworkBackground />
+
       {/* 1. Header Bar with BEL & System Status */}
       <Header
         activeLayer={activeLayer}

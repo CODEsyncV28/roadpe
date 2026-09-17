@@ -383,6 +383,21 @@ export const UploadInterfaceModal: React.FC<UploadInterfaceModalProps> = ({
     setProcessingPercent(15);
     setProcessingStage('Ingesting media into edge decode buffer...');
 
+    // LOCATION SYNCHRONIZATION: Ensure effective location is parsed and synchronized for all upload modes
+    let effectiveLocation = attachedGMapLocation;
+    let effectiveIsAttached = isLocationAttached;
+
+    if (googleMapsInput.trim()) {
+      const autoParsed = parseGoogleMapsInput(googleMapsInput.trim());
+      if (autoParsed.isValid) {
+        effectiveLocation = autoParsed;
+        effectiveIsAttached = true;
+        setAttachedGMapLocation(autoParsed);
+        setIsLocationAttached(true);
+        console.log('[Frontend Upload] Auto-parsed location from input field:', autoParsed);
+      }
+    }
+
     if (selectedFile) {
       const activeUploadId = uploadId || `upload_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
       try {
@@ -392,34 +407,71 @@ export const UploadInterfaceModal: React.FC<UploadInterfaceModalProps> = ({
 
         const formData = new FormData();
         formData.append('image', selectedFile);
+        formData.append('file', selectedFile);
         formData.append('uploadId', activeUploadId);
 
-        // LOCATION SYNCHRONIZATION: Transmit selected location fields to backend
-        if (isLocationAttached && attachedGMapLocation.isValid) {
+        const hasValidCoords = Boolean(
+          effectiveIsAttached &&
+          effectiveLocation.isValid &&
+          typeof effectiveLocation.lat === 'number' &&
+          typeof effectiveLocation.lng === 'number' &&
+          (effectiveLocation.lat !== 0 || effectiveLocation.lng !== 0)
+        );
+
+        if (hasValidCoords) {
           formData.append('locationSelected', 'true');
-          formData.append('lat', String(attachedGMapLocation.lat));
-          formData.append('lng', String(attachedGMapLocation.lng));
-          formData.append('locationName', attachedGMapLocation.name);
-          if (attachedGMapLocation.city) formData.append('city', attachedGMapLocation.city);
-          if (attachedGMapLocation.state) formData.append('state', attachedGMapLocation.state);
-          if (attachedGMapLocation.country) formData.append('country', attachedGMapLocation.country || 'India');
-          if (attachedGMapLocation.address) formData.append('address', attachedGMapLocation.address);
-          if (attachedGMapLocation.googleMapsUrl) formData.append('googleMapsUrl', attachedGMapLocation.googleMapsUrl);
+          formData.append('lat', String(effectiveLocation.lat));
+          formData.append('lng', String(effectiveLocation.lng));
+          formData.append('locationName', effectiveLocation.name);
+          if (effectiveLocation.city) formData.append('city', effectiveLocation.city);
+          if (effectiveLocation.state) formData.append('state', effectiveLocation.state);
+          if (effectiveLocation.country) formData.append('country', effectiveLocation.country);
+          if (effectiveLocation.address) formData.append('address', effectiveLocation.address);
+          if (effectiveLocation.googleMapsUrl) formData.append('googleMapsUrl', effectiveLocation.googleMapsUrl);
+          console.log(`[STAGE 1 - LOCATION TRANSMITTED] Lat: ${effectiveLocation.lat}, Lng: ${effectiveLocation.lng}, Name: "${effectiveLocation.name}"`);
         } else {
           formData.append('locationSelected', 'false');
           formData.append('lat', '0');
           formData.append('lng', '0');
           formData.append('locationName', 'Location not selected');
+          console.log('[STAGE 1 - LOCATION TRANSMITTED] No location attached (Location not selected)');
         }
 
         console.log('[Frontend Upload] Calling POST /api/detect-hazard...');
         setProcessingPercent(60);
         setProcessingStage('Running YOLOv8 road hazard model & computing bounding boxes...');
 
-        const response = await fetch('/api/detect-hazard', {
-          method: 'POST',
-          body: formData,
-        });
+        let response: Response;
+        try {
+          response = await fetch('/api/detect-hazard', {
+            method: 'POST',
+            body: formData,
+          });
+
+          // If /api/detect-hazard returned 404, fallback to /api/yolo
+          if (response.status === 404) {
+            console.warn('[Frontend Upload] /api/detect-hazard returned 404, falling back to /api/yolo...');
+            response = await fetch('/api/yolo', {
+              method: 'POST',
+              body: formData,
+            });
+          }
+        } catch (fetchErr: any) {
+          console.error('[Frontend Upload Error] Network connection failed:', fetchErr);
+          throw new Error(`Failed to reach YOLO backend service: ${fetchErr.message || fetchErr}`);
+        }
+
+        // Verify response Content-Type before parsing JSON to prevent unexpected token '<' errors
+        const contentType = response.headers.get('content-type') || '';
+        if (!contentType.includes('application/json')) {
+          const rawText = await response.text().catch(() => '');
+          const cleanSnippet = rawText.slice(0, 160).replace(/\s+/g, ' ');
+          const errorMsg = `YOLO Backend returned non-JSON response (HTTP ${response.status} ${response.statusText}, Content-Type: "${contentType || 'none'}"). Response: ${cleanSnippet || 'Empty response'}`;
+          console.error('[Frontend Upload Error]', errorMsg);
+          setIsProcessing(false);
+          setProcessingError(errorMsg);
+          return;
+        }
 
         if (!response.ok) {
           const errData = await response.json().catch(() => null);
@@ -444,18 +496,29 @@ export const UploadInterfaceModal: React.FC<UploadInterfaceModalProps> = ({
           return;
         }
 
-        const hasLocation = Boolean(data.hasSelectedLocation || (isLocationAttached && attachedGMapLocation.isValid));
-        const resolvedLocName = hasLocation
-          ? (data.locationName || attachedGMapLocation.name)
-          : 'Location not selected';
+        const hasLocation = Boolean(
+          data.hasSelectedLocation || 
+          hasValidCoords ||
+          (data.location && (data.location.latitude !== 0 || data.location.longitude !== 0))
+        );
+
         const resolvedLat = hasLocation
-          ? (data.location?.latitude ?? attachedGMapLocation.lat)
+          ? (data.location?.latitude ?? effectiveLocation.lat)
           : 0;
         const resolvedLng = hasLocation
-          ? (data.location?.longitude ?? attachedGMapLocation.lng)
+          ? (data.location?.longitude ?? effectiveLocation.lng)
           : 0;
+        const resolvedLocName = hasLocation
+          ? (data.locationName || effectiveLocation.name || (data.location?.address || `${resolvedLat.toFixed(6)}°, ${resolvedLng.toFixed(6)}°`))
+          : 'Location not selected';
         const resolvedCity = hasLocation
-          ? (data.location?.city || attachedGMapLocation.city || (resolvedLocName.includes('Vadodara') ? 'Vadodara' : ''))
+          ? (data.location?.city || effectiveLocation.city || '')
+          : '';
+        const resolvedState = hasLocation
+          ? (data.location?.state || effectiveLocation.state || '')
+          : '';
+        const resolvedCountry = hasLocation
+          ? (data.location?.country || effectiveLocation.country || '')
           : '';
 
         setProcessingPercent(85);
@@ -470,8 +533,9 @@ export const UploadInterfaceModal: React.FC<UploadInterfaceModalProps> = ({
           const newId = backendProblem?.id || det.id || `DET-${Math.floor(9300 + Math.random() * 600)}`;
           const timestampStr = `${todayDate} ${nowStr}`;
 
-          const issueLat = hasLocation ? resolvedLat + (idx > 0 ? idx * 0.0006 : 0) : 0;
-          const issueLng = hasLocation ? resolvedLng + (idx > 0 ? idx * 0.0005 : 0) : 0;
+          // Exact coordinates without offsets
+          const issueLat = hasLocation ? resolvedLat : 0;
+          const issueLng = hasLocation ? resolvedLng : 0;
 
           const assignedCorridor = generatedRouteData
             ? generatedRouteData.route.routeName
@@ -489,14 +553,14 @@ export const UploadInterfaceModal: React.FC<UploadInterfaceModalProps> = ({
               latitude: issueLat,
               longitude: issueLng,
               city: resolvedCity,
-              state: attachedGMapLocation.state || 'Gujarat',
-              country: 'India',
+              state: resolvedState,
+              country: resolvedCountry,
               address: resolvedLocName,
-              formattedAddress: attachedGMapLocation.formattedAddress || resolvedLocName,
+              formattedAddress: effectiveLocation.formattedAddress || resolvedLocName,
             } : undefined,
-            googleMapsUrl: hasLocation ? (attachedGMapLocation.googleMapsUrl || `https://www.google.com/maps?q=${issueLat.toFixed(6)},${issueLng.toFixed(6)}`) : undefined,
+            googleMapsUrl: hasLocation ? (effectiveLocation.googleMapsUrl || `https://www.google.com/maps?q=${issueLat.toFixed(6)},${issueLng.toFixed(6)}`) : undefined,
             attachedLocationMethod: hasLocation
-              ? (attachedGMapLocation.sourceType === 'URL_QUERY' || attachedGMapLocation.sourceType === 'URL_COORDINATE_PATH'
+              ? (effectiveLocation.sourceType === 'URL_QUERY' || effectiveLocation.sourceType === 'URL_COORDINATE_PATH'
                 ? 'GOOGLE_MAPS_LINK'
                 : 'COORDINATES')
               : undefined,
@@ -579,8 +643,8 @@ export const UploadInterfaceModal: React.FC<UploadInterfaceModalProps> = ({
             type: mapping.defaultDefect.type,
             title: mapping.defaultDefect.title,
             locationName: mapping.locationName,
-            lat: mapping.lat + (Math.random() - 0.5) * 0.001,
-            lng: mapping.lng + (Math.random() - 0.5) * 0.001,
+            lat: mapping.lat,
+            lng: mapping.lng,
             severity: mapping.defaultDefect.severity,
             confidence: mapping.defaultDefect.confidence,
             busId: customBusId || activeSample.busId,
@@ -635,32 +699,32 @@ export const UploadInterfaceModal: React.FC<UploadInterfaceModalProps> = ({
           };
         });
 
-        if (isLocationAttached && attachedGMapLocation.isValid) {
-          newIssues = newIssues.map((issue, idx) => {
-            const issueLat = attachedGMapLocation.lat + (idx > 0 ? idx * 0.0006 : 0);
-            const issueLng = attachedGMapLocation.lng + (idx > 0 ? idx * 0.0005 : 0);
+        if (effectiveIsAttached && effectiveLocation.isValid && (effectiveLocation.lat !== 0 || effectiveLocation.lng !== 0)) {
+          newIssues = newIssues.map((issue) => {
+            const issueLat = effectiveLocation.lat;
+            const issueLng = effectiveLocation.lng;
             return {
               ...issue,
-              locationName: attachedGMapLocation.name,
+              locationName: effectiveLocation.name,
               lat: issueLat,
               lng: issueLng,
               hasSelectedLocation: true,
               location: {
                 latitude: issueLat,
                 longitude: issueLng,
-                city: attachedGMapLocation.city || (attachedGMapLocation.name.includes('Vadodara') ? 'Vadodara' : 'Bharuch'),
-                state: attachedGMapLocation.state || 'Gujarat',
-                country: 'India',
-                address: attachedGMapLocation.name,
-                formattedAddress: attachedGMapLocation.formattedAddress || attachedGMapLocation.name,
+                city: effectiveLocation.city || '',
+                state: effectiveLocation.state || '',
+                country: effectiveLocation.country || '',
+                address: effectiveLocation.name,
+                formattedAddress: effectiveLocation.formattedAddress || effectiveLocation.name,
               },
-              googleMapsUrl: attachedGMapLocation.googleMapsUrl,
+              googleMapsUrl: effectiveLocation.googleMapsUrl,
               attachedLocationMethod:
-                attachedGMapLocation.sourceType === 'URL_QUERY' || attachedGMapLocation.sourceType === 'URL_COORDINATE_PATH'
+                effectiveLocation.sourceType === 'URL_QUERY' || effectiveLocation.sourceType === 'URL_COORDINATE_PATH'
                   ? 'GOOGLE_MAPS_LINK'
                   : 'COORDINATES',
               generatedBusRoute: generatedRouteData ? generatedRouteData.route : undefined,
-              busRoute: generatedRouteData ? generatedRouteData.route.routeName : (attachedGMapLocation.city ? `${attachedGMapLocation.city} Survey Route` : issue.busRoute),
+              busRoute: generatedRouteData ? generatedRouteData.route.routeName : (effectiveLocation.city ? `${effectiveLocation.city} Survey Route` : issue.busRoute),
               busId: generatedRouteData ? generatedRouteData.bus.id : issue.busId,
               sourceMedia: issue.sourceMedia
                 ? {

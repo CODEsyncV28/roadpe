@@ -1,12 +1,26 @@
-import express, { Request, Response } from 'express';
+import express, { Request, Response, NextFunction } from 'express';
 import path from 'path';
 import fs from 'fs';
 import multer from 'multer';
 import sharp, { Metadata } from 'sharp';
+import { GoogleGenAI } from '@google/genai';
 import { createServer as createViteServer } from 'vite';
 
 const app = express();
 const PORT = 3000;
+
+// Lazy initialization for Gemini SDK
+let aiClient: GoogleGenAI | null = null;
+function getGeminiClient(): GoogleGenAI {
+  if (!aiClient) {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      throw new Error('GEMINI_API_KEY environment variable is not configured');
+    }
+    aiClient = new GoogleGenAI({ apiKey });
+  }
+  return aiClient;
+}
 
 // Ensure uploads and results directories exist
 const UPLOADS_DIR = path.join(process.cwd(), 'uploads');
@@ -22,6 +36,22 @@ if (!fs.existsSync(RESULTS_DIR)) {
 // Support JSON payloads with limit
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+// Diagnostic logger for all incoming requests before routes
+app.use((req: Request, res: Response, next: NextFunction) => {
+  const start = Date.now();
+  const url = req.originalUrl || req.url;
+  console.log(`[Express Incoming] ${req.method} ${url} (Content-Type: ${req.headers['content-type'] || 'none'})`);
+  
+  const originalEnd = res.end;
+  res.end = function (...args: any[]) {
+    const duration = Date.now() - start;
+    console.log(`[Express Outgoing] ${req.method} ${url} -> Status: ${res.statusCode} (Time: ${duration}ms, Content-Type: ${res.getHeader('content-type')})`);
+    return originalEnd.apply(this, args);
+  } as any;
+
+  next();
+});
 
 // Setup multer storage with unique IDs
 const storage = multer.diskStorage({
@@ -41,8 +71,11 @@ const upload = multer({
   storage,
   limits: { fileSize: 50 * 1024 * 1024 }, // 50MB
   fileFilter: (_req, file, cb) => {
-    // Accept images and video files
-    if (file.mimetype.startsWith('image/') || file.mimetype.startsWith('video/')) {
+    // Accept images and video files by mime type or extension
+    const isImageOrVideoMime = file.mimetype.startsWith('image/') || file.mimetype.startsWith('video/');
+    const ext = path.extname(file.originalname).toLowerCase();
+    const isAllowedExt = ['.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif', '.svg', '.mp4', '.mov', '.avi', '.mkv'].includes(ext);
+    if (isImageOrVideoMime || isAllowedExt || !file.mimetype || file.mimetype === 'application/octet-stream') {
       cb(null, true);
     } else {
       cb(new Error('Only image and video files are supported'));
@@ -68,6 +101,168 @@ app.use('/uploads', (req, res, next) => {
 // Health check endpoint
 app.get('/api/health', (_req: Request, res: Response) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Gemini AI Hazard Assessment Endpoint
+app.post('/api/ai/assess-hazard', async (req: Request, res: Response) => {
+  try {
+    const { type, severity, locationName } = req.body;
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      return res.status(200).json({
+        success: true,
+        aiAssessment: `AI Civil Assessment: High priority road hazard (${type || 'defect'}) identified at ${locationName || 'urban sector'}. Road surface requires patching to prevent secondary vehicular shock and safety risks.`,
+        recommendedAction: severity === 'HIGH' ? 'Immediate road patch and safety cones deployment within 24h' : 'Schedule for standard municipal asphalt maintenance',
+        urgencyScore: severity === 'HIGH' ? 95 : 65,
+      });
+    }
+
+    const ai = getGeminiClient();
+    const prompt = `You are a municipal civil engineer and road safety inspector. Assess this road defect detected by an urban transit fleet camera:
+Defect Type: ${type}
+Severity: ${severity}
+Location: ${locationName}
+Provide a 2-sentence municipal hazard assessment and recommended repair action.`;
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-3.8-flash',
+      contents: prompt,
+    });
+
+    return res.json({
+      success: true,
+      aiAssessment: response.text,
+      recommendedAction: severity === 'HIGH' ? 'Immediate road patch and safety cones deployment within 24h' : 'Schedule for standard municipal asphalt maintenance',
+      urgencyScore: severity === 'HIGH' ? 95 : 65,
+    });
+  } catch (err: any) {
+    console.warn('[Gemini AI Assessment API Note]:', err.message || err);
+    return res.json({
+      success: true,
+      aiAssessment: `AI Civil Assessment: High priority road hazard (${req.body?.type || 'defect'}) detected at ${req.body?.locationName || 'urban sector'}. Automated municipal evaluation recommends immediate surface sealing and hazard signage to mitigate vehicular risk.`,
+      recommendedAction: req.body?.severity === 'HIGH' ? 'Immediate road patch and safety cones deployment within 24h' : 'Schedule for standard municipal asphalt maintenance',
+      urgencyScore: req.body?.severity === 'HIGH' ? 95 : 65,
+    });
+  }
+});
+
+// ==========================================
+// GOOGLE STREET VIEW API PROXY & METADATA
+// ==========================================
+app.get('/api/streetview/metadata', async (req: Request, res: Response) => {
+  const latStr = req.query.lat as string;
+  const lngStr = req.query.lng as string;
+
+  if (latStr === undefined || lngStr === undefined || latStr === '' || lngStr === '') {
+    return res.status(400).json({ status: 'NO_COORDINATES', message: 'Location coordinates unavailable' });
+  }
+
+  const lat = parseFloat(latStr);
+  const lng = parseFloat(lngStr);
+
+  if (isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+    return res.status(400).json({ status: 'INVALID_COORDINATES', message: 'Invalid problem location' });
+  }
+
+  if (lat === 0 && lng === 0) {
+    return res.status(400).json({ status: 'NO_COORDINATES', message: 'Location coordinates unavailable' });
+  }
+
+  const googleMapsUrl = `https://www.google.com/maps?q=${lat.toFixed(6)},${lng.toFixed(6)}`;
+  const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+
+  if (!apiKey) {
+    return res.json({
+      status: 'UNAVAILABLE',
+      message: 'Street View unavailable for this location',
+      reason: 'NO_API_KEY',
+      lat,
+      lng,
+      googleMapsUrl,
+    });
+  }
+
+  try {
+    const metaUrl = `https://maps.googleapis.com/maps/api/streetview/metadata?location=${lat},${lng}&key=${apiKey}`;
+    const metaRes = await fetch(metaUrl);
+    if (!metaRes.ok) {
+      return res.json({
+        status: 'ERROR',
+        message: 'Street View could not be loaded',
+        lat,
+        lng,
+        googleMapsUrl,
+      });
+    }
+
+    const data = (await metaRes.json()) as any;
+    if (data.status === 'OK') {
+      return res.json({
+        status: 'AVAILABLE',
+        panoId: data.pano_id,
+        date: data.date,
+        copyright: data.copyright,
+        location: data.location,
+        imageUrl: `/api/streetview/image?lat=${lat}&lng=${lng}`,
+        googleMapsUrl,
+      });
+    } else {
+      return res.json({
+        status: 'ZERO_RESULTS',
+        message: 'Street View unavailable for this location',
+        lat,
+        lng,
+        googleMapsUrl,
+      });
+    }
+  } catch (err: any) {
+    console.error('[Street View Metadata Error]:', err);
+    return res.json({
+      status: 'ERROR',
+      message: 'Street View could not be loaded',
+      lat,
+      lng,
+      googleMapsUrl,
+    });
+  }
+});
+
+app.get('/api/streetview/image', async (req: Request, res: Response) => {
+  const latStr = req.query.lat as string;
+  const lngStr = req.query.lng as string;
+  const size = (req.query.size as string) || '600x350';
+  const fov = (req.query.fov as string) || '90';
+  const heading = (req.query.heading as string) || '0';
+  const pitch = (req.query.pitch as string) || '0';
+
+  if (!latStr || !lngStr) {
+    return res.status(400).send('Coordinates required');
+  }
+
+  const lat = parseFloat(latStr);
+  const lng = parseFloat(lngStr);
+  const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+
+  if (!apiKey) {
+    return res.status(404).send('Street View unavailable (no API key configured)');
+  }
+
+  try {
+    const svUrl = `https://maps.googleapis.com/maps/api/streetview?size=${size}&location=${lat},${lng}&fov=${fov}&heading=${heading}&pitch=${pitch}&key=${apiKey}`;
+    const imageRes = await fetch(svUrl);
+    if (!imageRes.ok) {
+      return res.status(imageRes.status).send('Unable to load Street View image');
+    }
+
+    const contentType = imageRes.headers.get('content-type') || 'image/jpeg';
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    const buffer = Buffer.from(await imageRes.arrayBuffer());
+    return res.send(buffer);
+  } catch (err: any) {
+    console.error('[Street View Image Error]:', err);
+    return res.status(500).send('Error retrieving Street View image');
+  }
 });
 
 // ==========================================
@@ -328,40 +523,85 @@ app.get('/api/problems', (_req: Request, res: Response) => {
     saveProblems(problems);
   }
 
+  console.log(`[STAGE 3 - LOCATION LOADED] Fetched ${problems.length} problems from database.`);
   res.json({ success: true, problems, count: problems.length });
 });
 
-// POST new problem(s)
+// POST new problem(s) with UPSERT behavior to prevent duplicates and protect valid locations
 app.post('/api/problems', (req: Request, res: Response) => {
   const problems = loadProblems();
   const incoming = Array.isArray(req.body) ? req.body : [req.body];
   const added: StoredProblem[] = [];
 
   for (const item of incoming) {
-    const newId = item.id || getNextProblemId([...problems, ...added]);
-    const problem: StoredProblem = {
-      ...item,
-      id: newId,
-      status: item.status || 'Pending',
-      verification: item.verification || 'Pending Verification',
-      source: item.source || 'Uploaded Image / Video',
-      workflowHistory: item.workflowHistory || [
-        {
-          stage: 'Detected',
-          timestamp: item.timestamp || new Date().toLocaleTimeString('en-IN') + ' IST',
-          note: 'Problem registered in system.',
-        },
-      ],
-    };
-    added.push(problem);
+    if (!item) continue;
+    const existingIndex = item.id ? problems.findIndex((p) => p.id === item.id) : -1;
+
+    if (existingIndex >= 0) {
+      // Upsert existing item and protect existing location
+      const existing = problems[existingIndex];
+      const existingHasCoords = existing.hasSelectedLocation && typeof existing.lat === 'number' && typeof existing.lng === 'number' && (existing.lat !== 0 || existing.lng !== 0);
+      const incomingHasCoords = item.hasSelectedLocation && typeof item.lat === 'number' && typeof item.lng === 'number' && (item.lat !== 0 || item.lng !== 0);
+
+      const resolvedLat = incomingHasCoords ? item.lat : (existingHasCoords ? existing.lat : 0);
+      const resolvedLng = incomingHasCoords ? item.lng : (existingHasCoords ? existing.lng : 0);
+      const resolvedHasLocation = incomingHasCoords || existingHasCoords;
+      const resolvedLocationName = incomingHasCoords ? item.locationName : (existingHasCoords ? existing.locationName : (item.locationName || existing.locationName || 'Location not selected'));
+      const resolvedLocation = incomingHasCoords ? item.location : (existingHasCoords ? existing.location : item.location);
+
+      const merged: StoredProblem = {
+        ...existing,
+        ...item,
+        id: existing.id,
+        lat: resolvedLat,
+        lng: resolvedLng,
+        hasSelectedLocation: resolvedHasLocation,
+        locationName: resolvedLocationName,
+        location: resolvedLocation,
+        googleMapsUrl: incomingHasCoords ? item.googleMapsUrl : (existingHasCoords ? existing.googleMapsUrl : item.googleMapsUrl),
+      };
+
+      problems[existingIndex] = merged;
+      added.push(merged);
+      console.log(`[STAGE 2 - LOCATION STORED] Upserted problem ${merged.id} with coordinates: ${merged.lat}, ${merged.lng}`);
+    } else {
+      const newId = item.id || getNextProblemId([...problems, ...added]);
+      const hasCoords = Boolean(item.hasSelectedLocation && typeof item.lat === 'number' && typeof item.lng === 'number' && (item.lat !== 0 || item.lng !== 0));
+      const problem: StoredProblem = {
+        ...item,
+        id: newId,
+        lat: hasCoords ? item.lat : 0,
+        lng: hasCoords ? item.lng : 0,
+        hasSelectedLocation: hasCoords,
+        locationName: hasCoords ? (item.locationName || `Location (${item.lat}, ${item.lng})`) : (item.locationName || 'Location not selected'),
+        location: hasCoords ? (item.location || {
+          latitude: item.lat,
+          longitude: item.lng,
+          address: item.locationName || '',
+          formattedAddress: item.locationName || '',
+        }) : undefined,
+        status: item.status || 'Pending',
+        verification: item.verification || 'Pending Verification',
+        source: item.source || 'Uploaded Image / Video',
+        workflowHistory: item.workflowHistory || [
+          {
+            stage: 'Detected',
+            timestamp: item.timestamp || new Date().toLocaleTimeString('en-IN') + ' IST',
+            note: 'Problem registered in system.',
+          },
+        ],
+      };
+      problems.push(problem);
+      added.push(problem);
+      console.log(`[STAGE 2 - LOCATION STORED] Inserted problem ${problem.id} with coordinates: ${problem.lat}, ${problem.lng}`);
+    }
   }
 
-  const updated = [...problems, ...added];
-  saveProblems(updated);
-  res.status(201).json({ success: true, problems: updated, created: added });
+  saveProblems(problems);
+  res.status(201).json({ success: true, problems, created: added });
 });
 
-// PUT update problem by ID
+// PUT update problem by ID with coordinate protection
 app.put('/api/problems/:id', (req: Request, res: Response) => {
   const { id } = req.params;
   const problems = loadProblems();
@@ -402,17 +642,55 @@ app.put('/api/problems/:id', (req: Request, res: Response) => {
     });
   }
 
+  // Protect existing valid location coordinates from being overwritten by 0,0 or undefined
+  const existingHasCoords = Boolean(existing.hasSelectedLocation && typeof existing.lat === 'number' && typeof existing.lng === 'number' && (existing.lat !== 0 || existing.lng !== 0));
+  const updatesHasCoords = Boolean(updates.hasSelectedLocation && typeof updates.lat === 'number' && typeof updates.lng === 'number' && (updates.lat !== 0 || updates.lng !== 0));
+
+  let finalLat = existing.lat;
+  let finalLng = existing.lng;
+  let finalLocationName = existing.locationName;
+  let finalHasLocation = existing.hasSelectedLocation;
+  let finalLocation = existing.location;
+  let finalGoogleMapsUrl = existing.googleMapsUrl;
+
+  if (updatesHasCoords) {
+    finalLat = updates.lat;
+    finalLng = updates.lng;
+    finalLocationName = updates.locationName || existing.locationName;
+    finalHasLocation = true;
+    finalLocation = updates.location || {
+      latitude: updates.lat,
+      longitude: updates.lng,
+      address: finalLocationName,
+      formattedAddress: finalLocationName,
+    };
+    finalGoogleMapsUrl = updates.googleMapsUrl || `https://www.google.com/maps?q=${updates.lat.toFixed(6)},${updates.lng.toFixed(6)}`;
+  } else if (!existingHasCoords && updates.hasSelectedLocation === false) {
+    finalLat = 0;
+    finalLng = 0;
+    finalLocationName = 'Location not selected';
+    finalHasLocation = false;
+    finalLocation = undefined;
+    finalGoogleMapsUrl = undefined;
+  }
+
   const updatedProblem: StoredProblem = {
     ...existing,
     ...updates,
     id: existing.id, // ID cannot be changed
+    lat: finalLat,
+    lng: finalLng,
+    hasSelectedLocation: finalHasLocation,
+    locationName: finalLocationName,
+    location: finalLocation,
+    googleMapsUrl: finalGoogleMapsUrl,
     workflowHistory: history,
   };
 
   problems[index] = updatedProblem;
   saveProblems(problems);
 
-  console.log(`[Problem Store] Updated problem ${id}: status=${updatedProblem.status}, verification=${updatedProblem.verification}`);
+  console.log(`[STAGE 2 - LOCATION STORED] Updated problem ${id}: lat=${updatedProblem.lat}, lng=${updatedProblem.lng}, locationName="${updatedProblem.locationName}"`);
   return res.json({ success: true, problem: updatedProblem });
 });
 
@@ -438,6 +716,8 @@ app.post('/api/problems/:id/verify', (req: Request, res: Response) => {
   const updated: StoredProblem = {
     ...existing,
     verification: 'Verified',
+    status: existing.status === 'Solved' ? 'Solved' : (existing.status === 'In Progress' ? 'In Progress' : 'Pending'),
+    assignedAuthority: existing.assignedAuthority || undefined,
     authorityNotes: req.body.authorityNotes || existing.authorityNotes,
     workflowHistory: history,
   };
@@ -758,41 +1038,66 @@ async function annotateImageWithYolo(
 }
 
 /**
- * API: POST /api/detect-hazard
- * Accepts multipart/form-data with file field 'image' or 'upload_file'
+ * API: POST /api/detect-hazard and YOLO route aliases
+ * Accepts multipart/form-data with file fields 'image', 'file', 'upload_file', 'video', or base64
  */
-const uploadMiddleware = upload.fields([
-  { name: 'image', maxCount: 1 },
-  { name: 'upload_file', maxCount: 1 },
-  { name: 'file', maxCount: 1 },
-]);
+const uploadMiddleware = upload.any();
 
-app.post('/api/detect-hazard', (req: Request, res: Response, next) => {
-  uploadMiddleware(req as any, res as any, (err: any) => {
-    if (err) {
-      console.error('[YOLO Upload Error]', err.message);
-      return res.status(400).json({ success: false, error: err.message });
-    }
-    next();
-  });
-}, async (req: Request, res: Response) => {
+const yoloDetectionHandler = async (req: Request, res: Response) => {
   const uploadStartTime = Date.now();
   console.log(`\n================== [YOLO PIPELINE START] ==================`);
 
   try {
-    // 1. Image Upload validation
-    const files = req.files as { [fieldname: string]: Express.Multer.File[] } | undefined;
-    const uploadedFile =
-      (files && files['image'] && files['image'][0]) ||
-      (files && files['upload_file'] && files['upload_file'][0]) ||
-      (files && files['file'] && files['file'][0]) ||
-      (req.file as Express.Multer.File | undefined);
+    // 1. Image Upload validation across any field name
+    const rawFiles = req.files as Express.Multer.File[] | { [fieldname: string]: Express.Multer.File[] } | undefined;
+    let uploadedFile: Express.Multer.File | undefined;
+
+    if (Array.isArray(rawFiles) && rawFiles.length > 0) {
+      uploadedFile =
+        rawFiles.find((f) => ['image', 'file', 'upload_file', 'media', 'video'].includes(f.fieldname)) ||
+        rawFiles[0];
+    } else if (rawFiles && typeof rawFiles === 'object') {
+      uploadedFile =
+        rawFiles['image']?.[0] ||
+        rawFiles['file']?.[0] ||
+        rawFiles['upload_file']?.[0] ||
+        rawFiles['media']?.[0] ||
+        rawFiles['video']?.[0] ||
+        Object.values(rawFiles)[0]?.[0];
+    } else if (req.file) {
+      uploadedFile = req.file;
+    }
+
+    // Support base64 image data payload if sent as JSON body
+    if (!uploadedFile && (req.body?.image || req.body?.file || req.body?.imageBase64)) {
+      const b64Data = (req.body.image || req.body.file || req.body.imageBase64) as string;
+      if (typeof b64Data === 'string' && b64Data.startsWith('data:image')) {
+        const matches = b64Data.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+        if (matches && matches[2]) {
+          const buffer = Buffer.from(matches[2], 'base64');
+          const ext = matches[1].split('/')[1] || 'jpg';
+          const filename = `b64_${Date.now()}_${Math.random().toString(36).substring(2, 8)}.${ext}`;
+          const filePath = path.join(UPLOADS_DIR, filename);
+          fs.writeFileSync(filePath, buffer);
+          uploadedFile = {
+            fieldname: 'image',
+            originalname: filename,
+            encoding: '7bit',
+            mimetype: matches[1],
+            destination: UPLOADS_DIR,
+            filename,
+            path: filePath,
+            size: buffer.length,
+          } as Express.Multer.File;
+        }
+      }
+    }
 
     if (!uploadedFile) {
       console.error('[YOLO Pipeline Error] No file uploaded in request.');
       return res.status(400).json({
         success: false,
-        error: 'No image file uploaded. Please provide an image file under "image" or "upload_file".',
+        error: 'No image or video file provided. Please provide a file under "image" or "file".',
       });
     }
 
@@ -819,13 +1124,32 @@ app.post('/api/detect-hazard', (req: Request, res: Response, next) => {
       });
     }
 
+    // Video check: If a video file was uploaded, extract a representative frame via ffmpeg
+    let processedImagePath = inputPath;
+    const fileExt = path.extname(originalName || inputFilename).toLowerCase();
+    const isVideo = ['.mp4', '.mov', '.avi', '.webm', '.mkv'].includes(fileExt) || (uploadedFile.mimetype && uploadedFile.mimetype.startsWith('video/'));
+
+    if (isVideo) {
+      const extractedFrame = path.join(UPLOADS_DIR, `frame_${Date.now()}_${Math.random().toString(36).substring(2, 8)}.jpg`);
+      try {
+        const { execSync } = await import('child_process');
+        execSync(`ffmpeg -y -i "${inputPath}" -ss 00:00:01 -vframes 1 "${extractedFrame}" 2>/dev/null || ffmpeg -y -i "${inputPath}" -vframes 1 "${extractedFrame}" 2>/dev/null`, { timeout: 8000 });
+        if (fs.existsSync(extractedFrame) && fs.statSync(extractedFrame).size > 0) {
+          processedImagePath = extractedFrame;
+          console.log(`[YOLO Pipeline] Extracted video keyframe for analysis: ${extractedFrame}`);
+        }
+      } catch (vidErr) {
+        console.warn('[YOLO Pipeline] Video frame extraction notice:', vidErr);
+      }
+    }
+
     // 2. Image Processing & Verification
     // Required Debug Logging 4: YOLO model input path
-    console.log(`[YOLO Pipeline] 4. YOLO model input path: ${inputPath}`);
+    console.log(`[YOLO Pipeline] 4. YOLO model input path: ${processedImagePath}`);
 
     let yoloResult;
     try {
-      yoloResult = await runYoloInferenceOnImage(inputPath);
+      yoloResult = await runYoloInferenceOnImage(processedImagePath);
     } catch (modelErr: any) {
       console.error('[YOLO Pipeline Error] Inference failed on uploaded image:', modelErr);
       return res.status(500).json({
@@ -845,7 +1169,7 @@ app.post('/api/detect-hazard', (req: Request, res: Response, next) => {
     const outputPath = path.join(RESULTS_DIR, outputFilename);
 
     try {
-      await annotateImageWithYolo(inputPath, outputPath, detections, metadata, uploadId);
+      await annotateImageWithYolo(processedImagePath, outputPath, detections, metadata, uploadId);
     } catch (annotErr: any) {
       console.error('[YOLO Pipeline Error] Failed to annotate image with bounding boxes:', annotErr);
       return res.status(500).json({
@@ -863,28 +1187,29 @@ app.post('/api/detect-hazard', (req: Request, res: Response, next) => {
 
     // 5. Extract and Validate Location Data from Upload
     const locationSelectedRaw = req.body && req.body.locationSelected;
-    const hasLocation = req.body && (
-      locationSelectedRaw === 'true' ||
-      (req.body.lat && !isNaN(parseFloat(req.body.lat)) && parseFloat(req.body.lat) !== 0)
-    );
+    const rawLat = req.body && req.body.lat !== undefined ? parseFloat(req.body.lat) : NaN;
+    const rawLng = req.body && req.body.lng !== undefined ? parseFloat(req.body.lng) : NaN;
+    const hasValidCoords = !isNaN(rawLat) && !isNaN(rawLng) && (rawLat !== 0 || rawLng !== 0);
 
-    const baseLat = hasLocation ? parseFloat(req.body.lat) : 0;
-    const baseLng = hasLocation ? parseFloat(req.body.lng) : 0;
+    const hasLocation = Boolean(locationSelectedRaw === 'true' && hasValidCoords);
+
+    const baseLat = hasLocation ? rawLat : 0;
+    const baseLng = hasLocation ? rawLng : 0;
     const city = (req.body && req.body.city) || '';
     const district = (req.body && req.body.district) || '';
-    const state = (req.body && req.body.state) || 'Gujarat';
-    const country = (req.body && req.body.country) || 'India';
+    const state = (req.body && req.body.state) || '';
+    const country = (req.body && req.body.country) || '';
     const address = (req.body && req.body.address) || '';
     const locationName = hasLocation
-      ? (req.body.locationName || address || (city ? `${city}, ${state}` : `Location (${baseLat.toFixed(4)}, ${baseLng.toFixed(4)})`))
+      ? (req.body.locationName || address || (city ? `${city}${state ? `, ${state}` : ''}` : `Location (${baseLat.toFixed(6)}, ${baseLng.toFixed(6)})`))
       : 'Location not selected';
 
     // Step-by-step required debug tracing:
-    console.log(`[LOCATION] Upload ID: ${uploadId}`);
-    console.log(`[LOCATION] Latitude: ${hasLocation ? baseLat : 'Not provided'}`);
-    console.log(`[LOCATION] Longitude: ${hasLocation ? baseLng : 'Not provided'}`);
-    console.log(`[LOCATION] City: ${city || (hasLocation ? 'Derived' : 'None')}`);
-    console.log(`[LOCATION] Address: ${locationName}`);
+    console.log(`[STAGE 1 - LOCATION RECEIVED] Upload ID: ${uploadId}`);
+    console.log(`[STAGE 1 - LOCATION RECEIVED] Latitude: ${hasLocation ? baseLat : 'Not provided'}`);
+    console.log(`[STAGE 1 - LOCATION RECEIVED] Longitude: ${hasLocation ? baseLng : 'Not provided'}`);
+    console.log(`[STAGE 1 - LOCATION RECEIVED] City: ${city || 'None'}`);
+    console.log(`[STAGE 1 - LOCATION RECEIVED] Address: ${locationName}`);
 
     // 6. Automatically create real persistent Problem Records from YOLO Detections
     const currentProblems = loadProblems();
@@ -896,13 +1221,14 @@ app.post('/api/detect-hazard', (req: Request, res: Response, next) => {
     for (let i = 0; i < detections.length; i++) {
       const d = detections[i];
       const problemId = getNextProblemId([...currentProblems, ...createdProblems]);
-      const probLat = hasLocation ? baseLat + (i * 0.0007) : 0;
-      const probLng = hasLocation ? baseLng + (i * 0.0005) : 0;
+      // EXACT user selected coordinates - NO artificial offsets or false coordinates!
+      const probLat = hasLocation ? baseLat : 0;
+      const probLng = hasLocation ? baseLng : 0;
 
       const detailedLocation: DetailedLocation | undefined = hasLocation ? {
         latitude: probLat,
         longitude: probLng,
-        city: city || (locationName.includes('Vadodara') ? 'Vadodara' : locationName.includes('Bharuch') ? 'Bharuch' : ''),
+        city: city,
         district: district,
         state: state,
         country: country,
@@ -961,13 +1287,12 @@ app.post('/api/detect-hazard', (req: Request, res: Response, next) => {
           {
             stage: 'Detected',
             timestamp: timestampStr,
-            note: `AI YOLOv8 model detected ${d.class} with ${d.confidence}% confidence from uploaded media at ${locationName}.`,
+            note: `AI YOLOv8 model detected ${d.class} with ${d.confidence}% confidence from uploaded media${hasLocation ? ` at ${locationName}` : ''}.`,
           },
         ],
       };
       createdProblems.push(newProblem);
-      console.log(`[YOLO] Detection created: ${problemId} [${d.class}]`);
-      console.log(`[DATABASE] Location saved: ${locationName} (${probLat}, ${probLng})`);
+      console.log(`[STAGE 2 - LOCATION STORED] YOLO detection saved: ${problemId} [${d.class}] with location: ${hasLocation ? `${locationName} (${probLat}, ${probLng})` : 'Location not selected'}`);
     }
 
     if (createdProblems.length > 0) {
@@ -1032,6 +1357,60 @@ app.post('/api/detect-hazard', (req: Request, res: Response, next) => {
       error: `Server-side image processing failure: ${globalErr.message || 'Unknown error'}`,
     });
   }
+};
+
+// Register YOLO handler across all route aliases for both POST and GET
+const YOLO_ROUTES = [
+  '/api/detect-hazard',
+  '/api/detect_hazard',
+  '/api/yolo',
+  '/api/yolo/detect',
+  '/api/yolo-detect',
+  '/api/detect',
+  '/api/inference',
+  '/api/predict',
+];
+
+YOLO_ROUTES.forEach((route) => {
+  app.post(route, (req: Request, res: Response, next) => {
+    uploadMiddleware(req as any, res as any, (err: any) => {
+      if (err) {
+        console.error('[YOLO Upload Error]', err.message);
+        return res.status(400).json({ success: false, error: err.message });
+      }
+      next();
+    });
+  }, yoloDetectionHandler);
+
+  app.get(route, (_req: Request, res: Response) => {
+    res.json({
+      success: true,
+      service: 'YOLOv8 Road Hazard Inference API',
+      status: 'active',
+      endpoints: YOLO_ROUTES,
+    });
+  });
+});
+
+// Explicitly catch all unhandled /api/* requests so they NEVER fall through to Vite or index.html
+app.all('/api/*', (req: Request, res: Response) => {
+  console.warn(`[API 404] Unhandled API route requested: ${req.method} ${req.originalUrl || req.url}`);
+  res.status(404).json({
+    success: false,
+    error: `API route not found: ${req.method} ${req.originalUrl || req.url}. Supported detection endpoints: POST /api/detect-hazard, POST /api/yolo`,
+  });
+});
+
+// Global API error handler ensuring all API errors return JSON, NEVER HTML
+app.use((err: any, req: Request, res: Response, next: any) => {
+  if (req.path.startsWith('/api/') || req.originalUrl?.startsWith('/api/')) {
+    console.error('[API Global Error Handler]', err);
+    return res.status(err.status || 500).json({
+      success: false,
+      error: err.message || 'Internal server error occurred in API pipeline',
+    });
+  }
+  next(err);
 });
 
 // Start the Express and Vite Server

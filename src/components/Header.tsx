@@ -60,7 +60,7 @@ export const Header: React.FC<HeaderProps> = ({
   const activeBuses = busFleet.filter((b) => b.cameraStatus === 'ACTIVE').length;
 
   return (
-    <header className="bg-[#090d16] border-b border-cyan-950/60 px-4 py-2.5 select-none shrink-0 shadow-lg relative z-30">
+    <header className="bg-[#090d16]/85 backdrop-blur-md border-b border-cyan-950/60 px-4 py-2.5 select-none shrink-0 shadow-lg relative z-30">
       {/* Top Bar: Identity & Realtime System Telemetry */}
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-2.5">
         

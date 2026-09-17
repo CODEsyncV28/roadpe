@@ -26,6 +26,36 @@
   background: #334155;
 }
 
+/* MapLibre GL dark container & custom popups */
+.maplibregl-map {
+  font-family: 'Plus Jakarta Sans', sans-serif !important;
+  background-color: #080b11 !important;
+}
+
+.maplibregl-popup-content {
+  background: #0d121f !important;
+  color: #f1f5f9 !important;
+  border: 1px solid rgba(56, 189, 248, 0.3) !important;
+  border-radius: 8px !important;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.8), 0 0 15px rgba(6, 182, 212, 0.2) !important;
+  padding: 0 !important;
+}
+
+.maplibregl-popup-tip {
+  border-top-color: #0d121f !important;
+  border-bottom-color: #0d121f !important;
+}
+
+.maplibregl-ctrl-attrib {
+  background-color: rgba(9, 14, 26, 0.8) !important;
+  color: #64748b !important;
+  font-size: 10px !important;
+}
+
+.maplibregl-ctrl-attrib a {
+  color: #38bdf8 !important;
+}
+
 /* Leaflet dark tile custom filters and styling */
 .dark-map-tiles .leaflet-tile {
   filter: brightness(0.7) invert(1) contrast(3) hue-rotate(200deg) saturate(0.3) brightness(0.75);

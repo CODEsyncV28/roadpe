@@ -25,7 +25,8 @@ import {
   Send,
   UserCheck,
   Building2,
-  Play
+  Play,
+  Sparkles
 } from 'lucide-react';
 import { RoadIssue, WorkflowStatus, VerificationStatus, IssueType, Severity, BusFleet } from '../types';
 import { generateBusRouteForLocation, parseGoogleMapsInput, PRESET_GMAP_LANDMARKS } from '../utils/routeGenerator';
@@ -48,8 +49,21 @@ export const IssueDetailModal: React.FC<IssueDetailModalProps> = ({
   const [activeTab, setActiveTab] = useState<'AI_DETECTION' | 'AUTHORITY_VERIFICATION' | 'STATUS_TRACKING'>('AI_DETECTION');
   const [showBoundingBoxes, setShowBoundingBoxes] = useState(true);
 
+  const hasValidGps = Boolean(
+    (issue.hasSelectedLocation || (issue.lat !== 0 || issue.lng !== 0)) &&
+    typeof issue.lat === 'number' &&
+    typeof issue.lng === 'number' &&
+    !isNaN(issue.lat) &&
+    !isNaN(issue.lng) &&
+    (issue.lat !== 0 || issue.lng !== 0) &&
+    issue.locationName !== 'Location not selected'
+  );
+
   // Google Maps & Route generation state for this issue
-  const [gmapInput, setGmapInput] = useState(issue.googleMapsUrl || `${issue.lat.toFixed(5)}, ${issue.lng.toFixed(5)}`);
+  const [gmapInput, setGmapInput] = useState(
+    issue.googleMapsUrl || 
+    (hasValidGps ? `${issue.lat.toFixed(6)}, ${issue.lng.toFixed(6)}` : '')
+  );
   const [isGeneratingModalRoute, setIsGeneratingModalRoute] = useState(false);
   const [routeGeneratedToast, setRouteGeneratedToast] = useState('');
 
@@ -72,6 +86,36 @@ export const IssueDetailModal: React.FC<IssueDetailModalProps> = ({
   const [repairCostEstimateInr, setRepairCostEstimateInr] = useState(issue.repairCostEstimateInr || 4500);
   const [afterRepairImage, setAfterRepairImage] = useState(issue.afterRepairImage || '');
   const [savedSuccessMsg, setSavedSuccessMsg] = useState('');
+
+  // Server-side Gemini AI Hazard Assessment State
+  const [geminiAssessment, setGeminiAssessment] = useState<string | null>(null);
+  const [isAssessingWithGemini, setIsAssessingWithGemini] = useState(false);
+  const [geminiUrgencyScore, setGeminiUrgencyScore] = useState<number | null>(null);
+
+  const handleRequestGeminiAssessment = async () => {
+    setIsAssessingWithGemini(true);
+    try {
+      const res = await fetch('/api/ai/assess-hazard', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          problemId: issue.id,
+          type: issue.type,
+          severity: issue.severity,
+          locationName: issue.locationName,
+        }),
+      });
+      const data = await res.json();
+      if (data.success && data.aiAssessment) {
+        setGeminiAssessment(data.aiAssessment);
+        if (data.urgencyScore) setGeminiUrgencyScore(data.urgencyScore);
+      }
+    } catch (err) {
+      console.error('[Gemini AI Assessment Request Error]', err);
+    } finally {
+      setIsAssessingWithGemini(false);
+    }
+  };
 
   const handleSaveAuthorityChanges = (overrideVerification?: VerificationStatus) => {
     const finalVerification = overrideVerification || verification;
@@ -182,11 +226,26 @@ export const IssueDetailModal: React.FC<IssueDetailModalProps> = ({
   const handleUpdateLocationFromGMap = () => {
     if (!gmapInput.trim()) return;
     const parsed = parseGoogleMapsInput(gmapInput);
+    if (!parsed.isValid || (parsed.lat === 0 && parsed.lng === 0)) {
+      setRouteGeneratedToast('Please enter valid coordinates (e.g. 21.7051, 72.9959) or a Google Maps link.');
+      setTimeout(() => setRouteGeneratedToast(''), 3500);
+      return;
+    }
     const updatedIssue: RoadIssue = {
       ...issue,
       lat: parsed.lat,
       lng: parsed.lng,
+      hasSelectedLocation: true,
       locationName: parsed.name,
+      location: {
+        latitude: parsed.lat,
+        longitude: parsed.lng,
+        city: parsed.city || '',
+        state: parsed.state || '',
+        country: parsed.country || '',
+        address: parsed.name,
+        formattedAddress: parsed.formattedAddress || parsed.name,
+      },
       googleMapsUrl: parsed.googleMapsUrl,
     };
     onUpdateIssue(updatedIssue);
@@ -195,6 +254,11 @@ export const IssueDetailModal: React.FC<IssueDetailModalProps> = ({
   };
 
   const handleGenerateRouteForThisIssue = () => {
+    if (!hasValidGps) {
+      setRouteGeneratedToast('Please provide a valid location before generating a bus route.');
+      setTimeout(() => setRouteGeneratedToast(''), 3500);
+      return;
+    }
     setIsGeneratingModalRoute(true);
     setTimeout(() => {
       const generated = generateBusRouteForLocation(
@@ -206,7 +270,7 @@ export const IssueDetailModal: React.FC<IssueDetailModalProps> = ({
       const updatedIssue: RoadIssue = {
         ...issue,
         generatedBusRoute: generated.route,
-        googleMapsUrl: issue.googleMapsUrl || `https://www.google.com/maps?q=${issue.lat},${issue.lng}`,
+        googleMapsUrl: issue.googleMapsUrl || `https://www.google.com/maps?q=${issue.lat.toFixed(6)},${issue.lng.toFixed(6)}`,
         locationName: issue.locationName,
       };
       onUpdateIssue(updatedIssue, generated.bus);
@@ -351,17 +415,20 @@ export const IssueDetailModal: React.FC<IssueDetailModalProps> = ({
           {/* Left Column: Bus Camera Captured Evidence Frame (5/12 cols) */}
           <div className="lg:col-span-5 p-4 border-b lg:border-b-0 lg:border-r border-slate-800 bg-[#070b14] flex flex-col space-y-3">
             
-            {/* Camera Viewport Header */}
+            {/* Camera Viewport Header: AI Detection Evidence */}
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5 text-xs font-mono text-cyan-300">
+              <div className="flex items-center gap-1.5 text-xs font-mono text-cyan-300 font-bold">
                 <Camera className="w-4 h-4 text-cyan-400" />
-                <span>BUS CAMERA FRAME CAPTURE</span>
+                <span>AI DETECTION EVIDENCE</span>
               </div>
               <div className="flex items-center gap-2">
+                <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-cyan-950/80 text-cyan-300 border border-cyan-500/40 font-semibold">
+                  {issue.type.replace('_', ' ').toUpperCase()} • {issue.confidence}%
+                </span>
                 {issue.evidenceImage.startsWith('/results/') ? (
                   <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-950/80 text-emerald-300 border border-emerald-500/60 font-semibold flex items-center gap-1">
                     <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                    <span>YOLOv8 Annotated Frame</span>
+                    <span>YOLOv8 Annotated</span>
                   </span>
                 ) : (
                   <button
@@ -413,6 +480,19 @@ export const IssueDetailModal: React.FC<IssueDetailModalProps> = ({
               <div className="absolute inset-0 bg-gradient-to-b from-transparent via-cyan-400/5 to-transparent h-16 w-full animate-scanline pointer-events-none" />
             </div>
 
+            {/* Location, Coordinates & Status Summary Metadata */}
+            <div className="p-2.5 rounded bg-[#090e1a] border border-slate-800 text-[11px] font-mono space-y-1">
+              <div className="text-slate-200 font-bold truncate">📍 {issue.locationName}</div>
+              <div className="grid grid-cols-2 gap-1 text-[10px] text-slate-400 pt-1 border-t border-slate-800/60">
+                <div>Latitude: <span className="text-cyan-400 font-semibold">{issue.lat.toFixed(6)}°</span></div>
+                <div>Longitude: <span className="text-cyan-400 font-semibold">{issue.lng.toFixed(6)}°</span></div>
+                <div>Verification: <span className="text-emerald-400 font-bold">{issue.verification}</span></div>
+                <div>Assignment: <span className={issue.assignedAuthority ? 'text-indigo-300 font-bold' : 'text-amber-400 font-bold'}>{issue.assignedAuthority || 'Unassigned'}</span></div>
+                <div>Status: <span className="text-cyan-300 font-bold">{issue.status}</span></div>
+                <div>AI Confidence: <span className="text-cyan-200 font-bold">{issue.confidence}%</span></div>
+              </div>
+            </div>
+
             {/* After-Repair Photo if attached */}
             {afterRepairImage && (
               <div className="p-2 rounded bg-emerald-950/40 border border-emerald-600/40">
@@ -461,9 +541,15 @@ export const IssueDetailModal: React.FC<IssueDetailModalProps> = ({
                 </div>
                 <div className="col-span-2">
                   <span className="text-slate-500 block">Exact GPS Coordinates:</span>
-                  <span className="text-cyan-400 font-mono text-[10px]">
-                    Lat: {issue.lat.toFixed(5)}° N, Lng: {issue.lng.toFixed(5)}° E
-                  </span>
+                  {hasValidGps ? (
+                    <span className="text-cyan-400 font-mono text-[10px]">
+                      Lat: {issue.lat.toFixed(6)}° N, Lng: {issue.lng.toFixed(6)}° E
+                    </span>
+                  ) : (
+                    <span className="text-amber-400/90 font-mono text-[10px] italic">
+                      Location not selected
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -496,21 +582,33 @@ export const IssueDetailModal: React.FC<IssueDetailModalProps> = ({
                   <MapPin className="w-3.5 h-3.5 text-cyan-400" />
                   <span>GOOGLE MAPS LOCATION</span>
                 </span>
-                <a
-                  href={issue.googleMapsUrl || `https://www.google.com/maps?q=${issue.lat},${issue.lng}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-[10px] text-cyan-300 hover:text-cyan-200 flex items-center gap-1 hover:underline"
-                >
-                  <span>Open Maps</span>
-                  <ExternalLink className="w-3 h-3" />
-                </a>
+                {hasValidGps ? (
+                  <a
+                    href={issue.googleMapsUrl || `https://www.google.com/maps?q=${issue.lat.toFixed(6)},${issue.lng.toFixed(6)}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-[10px] text-cyan-300 hover:text-cyan-200 flex items-center gap-1 hover:underline"
+                  >
+                    <span>Open Maps</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                ) : (
+                  <span className="text-[10px] text-slate-500 italic">No GPS Pin</span>
+                )}
               </div>
               <div className="text-[11px] text-slate-300">
-                <div className="font-semibold text-slate-200 truncate">{issue.locationName}</div>
-                <div className="text-[10px] text-cyan-400 font-mono">
-                  {issue.lat.toFixed(5)}° N, {issue.lng.toFixed(5)}° E
+                <div className="font-semibold text-slate-200 truncate">
+                  {hasValidGps ? issue.locationName : 'Location not selected'}
                 </div>
+                {hasValidGps ? (
+                  <div className="text-[10px] text-cyan-400 font-mono">
+                    {issue.lat.toFixed(6)}° N, {issue.lng.toFixed(6)}° E
+                  </div>
+                ) : (
+                  <div className="text-[10px] text-slate-400 italic">
+                    Coordinates not provided during upload
+                  </div>
+                )}
               </div>
 
               {issue.generatedBusRoute ? (
@@ -668,9 +766,15 @@ export const IssueDetailModal: React.FC<IssueDetailModalProps> = ({
                     </div>
                     <div>
                       <span className="text-slate-500 block text-[10px]">Mapped Coordinates:</span>
-                      <span className="text-emerald-400 font-mono text-[10px]">
-                        {issue.lat.toFixed(5)}° N, {issue.lng.toFixed(5)}° E
-                      </span>
+                      {hasValidGps ? (
+                        <span className="text-emerald-400 font-mono text-[10px]">
+                          Lat: {issue.lat.toFixed(6)}° N, Lng: {issue.lng.toFixed(6)}° E
+                        </span>
+                      ) : (
+                        <span className="text-amber-400/90 font-mono text-[10px] italic">
+                          Location not selected
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -687,7 +791,7 @@ export const IssueDetailModal: React.FC<IssueDetailModalProps> = ({
                   <div className="p-2 rounded bg-[#0b1220] border border-slate-800 text-[10px] text-slate-300 space-y-1">
                     <div>• Visual Feature Match: <span className="text-emerald-400 font-bold">CONFIRMED (Asphalt void + fracture perimeter)</span></div>
                     <div>• Physical Suspension Impact: <span className="text-rose-400 font-bold">DETECTED (Spike &gt; 1.5G threshold)</span></div>
-                    <div>• GPS Geofence Check: <span className="text-cyan-300 font-bold">MATCHED (Bharuch Municipal Corridor)</span></div>
+                    <div>• GPS Geofence Check: <span className="text-cyan-300 font-bold">MATCHED (Surveyed Municipal Corridor)</span></div>
                   </div>
                 </div>
 
@@ -698,9 +802,46 @@ export const IssueDetailModal: React.FC<IssueDetailModalProps> = ({
                     <span className="text-xs text-slate-500">Based on traffic volume, depth &amp; bus speed</span>
                   </div>
                   <div className="text-right">
-                    <span className="text-xl font-bold font-mono text-rose-400">{issue.priorityScore || 88}/100</span>
+                    <span className="text-xl font-bold font-mono text-rose-400">{geminiUrgencyScore || issue.priorityScore || 88}/100</span>
                     <span className="text-[10px] block text-slate-500 font-mono">PRIORITY TIER 1</span>
                   </div>
+                </div>
+
+                {/* Gemini AI Municipal Hazard Evaluation */}
+                <div className="p-3 rounded-lg bg-slate-950 border border-cyan-900/60 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5 text-cyan-400 font-bold text-[11px]">
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>Gemini AI Civil Safety Analysis</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleRequestGeminiAssessment}
+                      disabled={isAssessingWithGemini}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-cyan-950 hover:bg-cyan-900 border border-cyan-700/60 text-[10px] text-cyan-300 font-mono transition-colors cursor-pointer disabled:opacity-50"
+                    >
+                      {isAssessingWithGemini ? (
+                        <>
+                          <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping" />
+                          <span>Consulting Gemini...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="w-3 h-3 text-cyan-400" />
+                          <span>{geminiAssessment ? 'Re-Analyze with Gemini' : 'Run Gemini Assessment'}</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                  {geminiAssessment ? (
+                    <div className="p-2.5 rounded bg-[#0b1322] border border-cyan-800/40 text-[11px] text-slate-200 leading-relaxed font-sans">
+                      {geminiAssessment}
+                    </div>
+                  ) : (
+                    <p className="text-[10px] text-slate-500 font-mono">
+                      Query Google Gemini AI model on server to generate civil engineering assessment and dispatch protocols.
+                    </p>
+                  )}
                 </div>
 
                 {/* Section: Attached Google Maps Location & Dynamic Bus Route Generation */}
@@ -714,15 +855,19 @@ export const IssueDetailModal: React.FC<IssueDetailModalProps> = ({
                         Google Maps Location &amp; Bus Route Patrol
                       </span>
                     </div>
-                    <a
-                      href={issue.googleMapsUrl || `https://www.google.com/maps?q=${issue.lat},${issue.lng}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-1 text-[10px] text-cyan-300 hover:text-cyan-200 hover:underline"
-                    >
-                      <span>Open Live Maps</span>
-                      <ExternalLink className="w-3 h-3" />
-                    </a>
+                    {hasValidGps ? (
+                      <a
+                        href={issue.googleMapsUrl || `https://www.google.com/maps?q=${issue.lat.toFixed(6)},${issue.lng.toFixed(6)}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 text-[10px] text-cyan-300 hover:text-cyan-200 hover:underline"
+                      >
+                        <span>Open Live Maps</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    ) : (
+                      <span className="text-[10px] text-amber-400/90 font-mono">Location not selected</span>
+                    )}
                   </div>
 
                   {/* Edit/Update Location Input */}
@@ -837,34 +982,6 @@ export const IssueDetailModal: React.FC<IssueDetailModalProps> = ({
             {/* TAB CONTENT: AUTHORITY & VERIFICATION */}
             {activeTab === 'AUTHORITY_VERIFICATION' && (
               <div className="space-y-3.5 text-xs font-mono">
-                
-                {/* Assign Problem Banner */}
-                {(issue.verification === 'VERIFIED' || issue.verification === 'Verified' || issue.verification === 'Verified by Staff' || issue.verification === 'AUTHORITY_OVERRIDE' || issue.verification === 'Authority Override') && (
-                  <div className="p-3 rounded-lg bg-indigo-950/40 border border-indigo-500/50 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5">
-                    <div>
-                      <span className="text-slate-200 font-bold block text-[11px] flex items-center gap-1.5">
-                        <Building2 className="w-3.5 h-3.5 text-indigo-400" />
-                        <span>Assign Problem to Municipal Department</span>
-                      </span>
-                      <span className="text-[10px] text-slate-400 block mt-0.5">
-                        {issue.assignedAuthority
-                          ? `Currently assigned to ${issue.assignedAuthority}${issue.assignedPerson ? ` (${issue.assignedPerson})` : ''}`
-                          : 'Not yet assigned to any maintenance crew'}
-                      </span>
-                    </div>
-                    {onOpenAssignModal && (
-                      <button
-                        type="button"
-                        onClick={() => onOpenAssignModal(issue)}
-                        className="px-3.5 py-1.5 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 shadow-md shadow-cyan-500/20 transition-all cursor-pointer shrink-0"
-                      >
-                        <Send className="w-3.5 h-3.5" />
-                        <span>{issue.assignedAuthority ? 'Reassign Problem' : 'Assign Problem'}</span>
-                      </button>
-                    )}
-                  </div>
-                )}
-
                 {/* Verification Status */}
                 <div className="p-3 rounded-lg bg-slate-950 border border-slate-800 space-y-2">
                   <label className="text-slate-300 font-bold block">

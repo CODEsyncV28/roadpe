@@ -193,11 +193,13 @@ export function calculateHaversineDistanceKm(
 
 // Generate Google Maps URL
 export function generateGoogleMapsUrl(lat: number, lng: number): string {
+  if (lat === 0 && lng === 0) return '';
   return `https://www.google.com/maps?q=${lat.toFixed(6)},${lng.toFixed(6)}&z=16`;
 }
 
 /**
  * Helper to determine city & state by coordinate proximity for Indian regions
+ * NEVER forces 'Gujarat' or fake cities onto unknown coordinates.
  */
 export function resolveCityFromCoordinates(lat: number, lng: number): { city: string; state: string; name: string } {
   if (lat >= 22.15 && lat <= 22.45 && lng >= 73.05 && lng <= 73.35) {
@@ -221,193 +223,38 @@ export function resolveCityFromCoordinates(lat: number, lng: number): { city: st
   if (lat >= 22.15 && lat <= 22.40 && lng >= 70.65 && lng <= 70.95) {
     return { city: 'Rajkot', state: 'Gujarat', name: 'Rajkot, Gujarat' };
   }
-  return { city: 'Urban Sector', state: 'Gujarat', name: `${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E` };
+  if (lat >= 18.85 && lat <= 19.30 && lng >= 72.75 && lng <= 73.10) {
+    return { city: 'Mumbai', state: 'Maharashtra', name: 'Mumbai, Maharashtra' };
+  }
+  if (lat >= 28.40 && lat <= 28.90 && lng >= 76.85 && lng <= 77.40) {
+    return { city: 'New Delhi', state: 'Delhi', name: 'New Delhi, Delhi' };
+  }
+
+  // Exact coordinates without forcing artificial defaults
+  const latDir = lat >= 0 ? 'N' : 'S';
+  const lngDir = lng >= 0 ? 'E' : 'W';
+  return { 
+    city: '', 
+    state: '', 
+    name: `${Math.abs(lat).toFixed(6)}° ${latDir}, ${Math.abs(lng).toFixed(6)}° ${lngDir}` 
+  };
 }
 
 /**
  * Robust Google Maps input parser:
  * Parses:
- * 1. Coordinates: "22.3072, 73.1812" or "22.3072 73.1812"
- * 2. URL with ?q=lat,lng: https://maps.google.com/?q=22.3072,73.1812
- * 3. URL with @lat,lng,zoom: https://www.google.com/maps/@22.3072,73.1812,17z
- * 4. URL with /place/Name/@lat,lng: https://www.google.com/maps/place/Vadodara/@22.3072,73.1812
+ * 1. Coordinates: "21.7160, 72.9920", "21.7160 72.9920", "21.7160° N, 72.9920° E"
+ * 2. URL with ?q=lat,lng: https://maps.google.com/?q=21.7160,72.9920
+ * 3. URL with @lat,lng,zoom: https://www.google.com/maps/@21.7085,72.9860,17z
+ * 4. URL with /place/Name/@lat,lng or /place/lat,lng
  * 5. City names: "Vadodara", "Bharuch", "Ahmedabad", etc.
  * 6. Landmark names: "Alkapuri", "Kasak Circle", etc.
+ * CRITICAL: (0, 0) is NEVER valid.
  */
 export function parseGoogleMapsInput(input: string): ParsedGoogleMapsLocation {
   const trimmed = input.trim();
 
-  if (!trimmed) {
-    return {
-      lat: 0,
-      lng: 0,
-      isValid: false,
-      name: 'Location not selected',
-      formattedCoordinates: 'None',
-      sourceType: 'FALLBACK',
-      googleMapsUrl: '',
-      city: '',
-      state: '',
-      country: '',
-      address: '',
-      formattedAddress: '',
-    };
-  }
-
-  // 1. Check for city keywords first if direct text input
-  const lower = trimmed.toLowerCase();
-  const citiesMap: Record<string, { lat: number; lng: number; city: string; state: string; name: string }> = {
-    vadodara: { lat: 22.3072, lng: 73.1812, city: 'Vadodara', state: 'Gujarat', name: 'Vadodara, Gujarat' },
-    baroda: { lat: 22.3072, lng: 73.1812, city: 'Vadodara', state: 'Gujarat', name: 'Vadodara, Gujarat' },
-    bharuch: { lat: 21.7085, lng: 72.9860, city: 'Bharuch', state: 'Gujarat', name: 'Bharuch, Gujarat' },
-    ahmedabad: { lat: 23.0225, lng: 72.5714, city: 'Ahmedabad', state: 'Gujarat', name: 'Ahmedabad, Gujarat' },
-    surat: { lat: 21.1702, lng: 72.8311, city: 'Surat', state: 'Gujarat', name: 'Surat, Gujarat' },
-    ankleshwar: { lat: 21.6264, lng: 73.0034, city: 'Ankleshwar', state: 'Gujarat', name: 'Ankleshwar, Gujarat' },
-    gandhinagar: { lat: 23.2156, lng: 72.6369, city: 'Gandhinagar', state: 'Gujarat', name: 'Gandhinagar, Gujarat' },
-    rajkot: { lat: 22.3039, lng: 70.8022, city: 'Rajkot', state: 'Gujarat', name: 'Rajkot, Gujarat' },
-  };
-
-  for (const [key, info] of Object.entries(citiesMap)) {
-    if (lower === key || lower.startsWith(`${key},`) || lower.includes(`${key} city`) || lower.includes(`${key}, gujarat`)) {
-      return {
-        lat: info.lat,
-        lng: info.lng,
-        isValid: true,
-        name: info.name,
-        formattedCoordinates: `${info.lat.toFixed(5)}°N, ${info.lng.toFixed(5)}°E`,
-        sourceType: 'CITY_MATCH',
-        googleMapsUrl: generateGoogleMapsUrl(info.lat, info.lng),
-        city: info.city,
-        state: info.state,
-        country: 'India',
-        address: info.name,
-        formattedAddress: `${info.name}, India`,
-      };
-    }
-  }
-
-  // 2. Check for @lat,lng in URL (standard Google Maps web url)
-  const atMatch = trimmed.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
-  if (atMatch) {
-    const lat = parseFloat(atMatch[1]);
-    const lng = parseFloat(atMatch[2]);
-    let placeName = 'Attached Google Maps Location';
-    const placeMatch = trimmed.match(/\/place\/([^/@]+)/);
-    if (placeMatch && placeMatch[1]) {
-      placeName = decodeURIComponent(placeMatch[1].replace(/\+/g, ' '));
-    }
-    const resolved = resolveCityFromCoordinates(lat, lng);
-
-    return {
-      lat,
-      lng,
-      isValid: true,
-      name: placeName !== 'Attached Google Maps Location' ? `${placeName}, ${resolved.city}` : resolved.name,
-      formattedCoordinates: `${lat.toFixed(5)}°N, ${lng.toFixed(5)}°E`,
-      sourceType: 'URL_COORDINATE_PATH',
-      googleMapsUrl: generateGoogleMapsUrl(lat, lng),
-      city: resolved.city,
-      state: resolved.state,
-      country: 'India',
-      address: placeName,
-      formattedAddress: `${placeName}, ${resolved.name}`,
-    };
-  }
-
-  // 3. Check for ?q=lat,lng or query=lat,lng or ll=lat,lng
-  const qMatch = trimmed.match(/[?&](?:q|query|ll)=(-?\d+\.\d+)(?:,|%2C)(-?\d+\.\d+)/i);
-  if (qMatch) {
-    const lat = parseFloat(qMatch[1]);
-    const lng = parseFloat(qMatch[2]);
-    const resolved = resolveCityFromCoordinates(lat, lng);
-    return {
-      lat,
-      lng,
-      isValid: true,
-      name: resolved.name,
-      formattedCoordinates: `${lat.toFixed(5)}°N, ${lng.toFixed(5)}°E`,
-      sourceType: 'URL_QUERY',
-      googleMapsUrl: generateGoogleMapsUrl(lat, lng),
-      city: resolved.city,
-      state: resolved.state,
-      country: 'India',
-      address: resolved.name,
-      formattedAddress: `${resolved.name}, India`,
-    };
-  }
-
-  // 4. Check for direct coordinates "lat, lng" or "lat lng"
-  const directCoordMatch = trimmed.match(/^(-?\d+\.\d+)[,\s]+(-?\d+\.\d+)$/);
-  if (directCoordMatch) {
-    const lat = parseFloat(directCoordMatch[1]);
-    const lng = parseFloat(directCoordMatch[2]);
-    const resolved = resolveCityFromCoordinates(lat, lng);
-    return {
-      lat,
-      lng,
-      isValid: true,
-      name: resolved.name,
-      formattedCoordinates: `${lat.toFixed(5)}°N, ${lng.toFixed(5)}°E`,
-      sourceType: 'COORDINATE_TEXT',
-      googleMapsUrl: generateGoogleMapsUrl(lat, lng),
-      city: resolved.city,
-      state: resolved.state,
-      country: 'India',
-      address: resolved.name,
-      formattedAddress: `${resolved.name}, India`,
-    };
-  }
-
-  // 5. Check for landmark match in presets
-  const matchedLandmark = PRESET_GMAP_LANDMARKS.find((lm) =>
-    lm.name.toLowerCase().includes(lower) ||
-    lm.category.toLowerCase().includes(lower) ||
-    lm.corridor.toLowerCase().includes(lower) ||
-    lm.address.toLowerCase().includes(lower) ||
-    lm.id.toLowerCase().includes(lower)
-  );
-
-  if (matchedLandmark) {
-    return {
-      lat: matchedLandmark.lat,
-      lng: matchedLandmark.lng,
-      isValid: true,
-      name: matchedLandmark.name,
-      formattedCoordinates: `${matchedLandmark.lat.toFixed(5)}°N, ${matchedLandmark.lng.toFixed(5)}°E`,
-      sourceType: 'LANDMARK_MATCH',
-      googleMapsUrl: generateGoogleMapsUrl(matchedLandmark.lat, matchedLandmark.lng),
-      city: matchedLandmark.city,
-      state: matchedLandmark.state,
-      country: 'India',
-      address: matchedLandmark.address,
-      formattedAddress: matchedLandmark.address,
-    };
-  }
-
-  // 6. Check for URL with query text (e.g. maps.google.com/?q=Vadodara)
-  if (trimmed.includes('q=') || trimmed.includes('/place/')) {
-    for (const [key, info] of Object.entries(citiesMap)) {
-      if (lower.includes(key)) {
-        return {
-          lat: info.lat,
-          lng: info.lng,
-          isValid: true,
-          name: info.name,
-          formattedCoordinates: `${info.lat.toFixed(5)}°N, ${info.lng.toFixed(5)}°E`,
-          sourceType: 'URL_QUERY',
-          googleMapsUrl: generateGoogleMapsUrl(info.lat, info.lng),
-          city: info.city,
-          state: info.state,
-          country: 'India',
-          address: info.name,
-          formattedAddress: `${info.name}, India`,
-        };
-      }
-    }
-  }
-
-  // If text doesn't match and coordinates are not found
-  return {
+  const fallback: ParsedGoogleMapsLocation = {
     lat: 0,
     lng: 0,
     isValid: false,
@@ -421,6 +268,226 @@ export function parseGoogleMapsInput(input: string): ParsedGoogleMapsLocation {
     address: '',
     formattedAddress: '',
   };
+
+  if (!trimmed) {
+    return fallback;
+  }
+
+  const formatResult = (
+    lat: number,
+    lng: number,
+    name: string,
+    sourceType: ParsedGoogleMapsLocation['sourceType'],
+    city = '',
+    state = '',
+    country = 'India',
+    address = ''
+  ): ParsedGoogleMapsLocation => {
+    // 0,0 must NEVER be treated as a valid location!
+    if ((lat === 0 && lng === 0) || isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+      return fallback;
+    }
+    const latDir = lat >= 0 ? 'N' : 'S';
+    const lngDir = lng >= 0 ? 'E' : 'W';
+    const formattedCoordinates = `${Math.abs(lat).toFixed(6)}° ${latDir}, ${Math.abs(lng).toFixed(6)}° ${lngDir}`;
+    const cleanName = name || formattedCoordinates;
+
+    const res: ParsedGoogleMapsLocation = {
+      lat,
+      lng,
+      isValid: true,
+      name: cleanName,
+      formattedCoordinates,
+      sourceType,
+      googleMapsUrl: generateGoogleMapsUrl(lat, lng),
+      city,
+      state,
+      country,
+      address: address || cleanName,
+      formattedAddress: address ? `${address}, ${cleanName}` : cleanName,
+    };
+
+    console.log(`[STAGE 1 - LOCATION PARSED] Lat: ${lat}, Lng: ${lng}, Name: "${res.name}", Source: ${sourceType}`);
+    return res;
+  };
+
+  // 1. Check for coordinates with optional degree notation and directional indicators:
+  // e.g. "21.7160° N, 72.9920° E", "21.7160N, 72.9920E", "21.7160, 72.9920", "-33.8688, 151.2093"
+  const degreeCoordMatch = trimmed.match(
+    /^([+-]?\d+(?:\.\d+)?)\s*°?\s*([NSns])?[,\s]+([+-]?\d+(?:\.\d+)?)\s*°?\s*([EWew])?$/
+  );
+  if (degreeCoordMatch) {
+    let lat = parseFloat(degreeCoordMatch[1]);
+    const latDir = (degreeCoordMatch[2] || '').toUpperCase();
+    let lng = parseFloat(degreeCoordMatch[3]);
+    const lngDir = (degreeCoordMatch[4] || '').toUpperCase();
+
+    if (latDir === 'S') lat = -Math.abs(lat);
+    if (latDir === 'N') lat = Math.abs(lat);
+    if (lngDir === 'W') lng = -Math.abs(lng);
+    if (lngDir === 'E') lng = Math.abs(lng);
+
+    const resolved = resolveCityFromCoordinates(lat, lng);
+    return formatResult(
+      lat,
+      lng,
+      resolved.name,
+      'COORDINATE_TEXT',
+      resolved.city,
+      resolved.state,
+      resolved.state ? 'India' : ''
+    );
+  }
+
+  // 2. Check for @lat,lng in URL (standard Google Maps web url e.g. /@21.7085,72.9860,17z)
+  const atMatch = trimmed.match(/@([+-]?\d+\.\d+),([+-]?\d+\.\d+)/);
+  if (atMatch) {
+    const lat = parseFloat(atMatch[1]);
+    const lng = parseFloat(atMatch[2]);
+    let placeName = '';
+    const placeMatch = trimmed.match(/\/place\/([^/@]+)/);
+    if (placeMatch && placeMatch[1]) {
+      placeName = decodeURIComponent(placeMatch[1].replace(/\+/g, ' '));
+    }
+    const resolved = resolveCityFromCoordinates(lat, lng);
+    const displayName = placeName ? `${placeName}${resolved.city ? `, ${resolved.city}` : ''}` : resolved.name;
+
+    return formatResult(
+      lat,
+      lng,
+      displayName,
+      'URL_COORDINATE_PATH',
+      resolved.city,
+      resolved.state,
+      resolved.state ? 'India' : '',
+      placeName
+    );
+  }
+
+  // 3. Check for query parameter coordinates: ?q=lat,lng or query=lat,lng or ll=lat,lng or center=lat,lng
+  const qMatch = trimmed.match(/[?&](?:q|query|ll|center|destination|origin)=([+-]?\d+\.\d+)(?:,|%2C)([+-]?\d+\.\d+)/i);
+  if (qMatch) {
+    const lat = parseFloat(qMatch[1]);
+    const lng = parseFloat(qMatch[2]);
+    const resolved = resolveCityFromCoordinates(lat, lng);
+    return formatResult(
+      lat,
+      lng,
+      resolved.name,
+      'URL_QUERY',
+      resolved.city,
+      resolved.state,
+      resolved.state ? 'India' : ''
+    );
+  }
+
+  // 4. Check for /place/lat,lng or /search/lat,lng in URL
+  const placeCoordMatch = trimmed.match(/\/(?:place|search)\/([+-]?\d+\.\d+)(?:,|%2C)([+-]?\d+\.\d+)/i);
+  if (placeCoordMatch) {
+    const lat = parseFloat(placeCoordMatch[1]);
+    const lng = parseFloat(placeCoordMatch[2]);
+    const resolved = resolveCityFromCoordinates(lat, lng);
+    return formatResult(
+      lat,
+      lng,
+      resolved.name,
+      'URL_COORDINATE_PATH',
+      resolved.city,
+      resolved.state,
+      resolved.state ? 'India' : ''
+    );
+  }
+
+  // 5. Check for coordinates anywhere within arbitrary string
+  const anyCoordMatch = trimmed.match(/([+-]?\d{1,2}\.\d{3,8})[,\s]+([+-]?\d{1,3}\.\d{3,8})/);
+  if (anyCoordMatch) {
+    const lat = parseFloat(anyCoordMatch[1]);
+    const lng = parseFloat(anyCoordMatch[2]);
+    if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180 && (lat !== 0 || lng !== 0)) {
+      const resolved = resolveCityFromCoordinates(lat, lng);
+      return formatResult(
+        lat,
+        lng,
+        resolved.name,
+        'COORDINATE_TEXT',
+        resolved.city,
+        resolved.state,
+        resolved.state ? 'India' : ''
+      );
+    }
+  }
+
+  // 6. Check for city keywords if direct text input
+  const lower = trimmed.toLowerCase();
+  const citiesMap: Record<string, { lat: number; lng: number; city: string; state: string; name: string }> = {
+    vadodara: { lat: 22.3072, lng: 73.1812, city: 'Vadodara', state: 'Gujarat', name: 'Vadodara, Gujarat' },
+    baroda: { lat: 22.3072, lng: 73.1812, city: 'Vadodara', state: 'Gujarat', name: 'Vadodara, Gujarat' },
+    bharuch: { lat: 21.7085, lng: 72.9860, city: 'Bharuch', state: 'Gujarat', name: 'Bharuch, Gujarat' },
+    ahmedabad: { lat: 23.0225, lng: 72.5714, city: 'Ahmedabad', state: 'Gujarat', name: 'Ahmedabad, Gujarat' },
+    surat: { lat: 21.1702, lng: 72.8311, city: 'Surat', state: 'Gujarat', name: 'Surat, Gujarat' },
+    ankleshwar: { lat: 21.6264, lng: 73.0034, city: 'Ankleshwar', state: 'Gujarat', name: 'Ankleshwar, Gujarat' },
+    gandhinagar: { lat: 23.2156, lng: 72.6369, city: 'Gandhinagar', state: 'Gujarat', name: 'Gandhinagar, Gujarat' },
+    rajkot: { lat: 22.3039, lng: 70.8022, city: 'Rajkot', state: 'Gujarat', name: 'Rajkot, Gujarat' },
+    mumbai: { lat: 19.0760, lng: 72.8777, city: 'Mumbai', state: 'Maharashtra', name: 'Mumbai, Maharashtra' },
+    delhi: { lat: 28.6139, lng: 77.2090, city: 'New Delhi', state: 'Delhi', name: 'New Delhi, Delhi' },
+  };
+
+  for (const [key, info] of Object.entries(citiesMap)) {
+    if (lower === key || lower.startsWith(`${key},`) || lower.includes(`${key} city`) || lower.includes(`${key},`)) {
+      return formatResult(
+        info.lat,
+        info.lng,
+        info.name,
+        'CITY_MATCH',
+        info.city,
+        info.state,
+        'India'
+      );
+    }
+  }
+
+  // 7. Check for landmark match in presets
+  const matchedLandmark = PRESET_GMAP_LANDMARKS.find((lm) =>
+    lm.name.toLowerCase().includes(lower) ||
+    lm.category.toLowerCase().includes(lower) ||
+    lm.corridor.toLowerCase().includes(lower) ||
+    lm.address.toLowerCase().includes(lower) ||
+    lm.id.toLowerCase().includes(lower)
+  );
+
+  if (matchedLandmark) {
+    return formatResult(
+      matchedLandmark.lat,
+      matchedLandmark.lng,
+      matchedLandmark.name,
+      'LANDMARK_MATCH',
+      matchedLandmark.city,
+      matchedLandmark.state,
+      'India',
+      matchedLandmark.address
+    );
+  }
+
+  // 8. Check for URL with query text (e.g. maps.google.com/?q=Vadodara)
+  if (trimmed.includes('q=') || trimmed.includes('/place/')) {
+    for (const [key, info] of Object.entries(citiesMap)) {
+      if (lower.includes(key)) {
+        return formatResult(
+          info.lat,
+          info.lng,
+          info.name,
+          'URL_QUERY',
+          info.city,
+          info.state,
+          'India'
+        );
+      }
+    }
+  }
+
+  // If text doesn't match and coordinates are not found:
+  // Return invalid fallback, NEVER invent coordinates!
+  return fallback;
 }
 
 /**

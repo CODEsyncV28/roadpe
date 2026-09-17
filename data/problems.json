@@ -5,7 +5,7 @@
     "title": "Severe Deep Pothole Cluster (8cm depth)",
     "locationName": "Station Road, Near Railway Overbridge Cross, Bharuch",
     "lat": 21.7085,
-    "lng": 72.9860,
+    "lng": 72.986,
     "severity": "HIGH",
     "priority": "Critical",
     "confidence": 94.6,
@@ -57,8 +57,8 @@
     "type": "waterlogging",
     "title": "Severe Water Ponding Across Dual Lanes",
     "locationName": "Kasak Circle to Civil Hospital Road, Bharuch",
-    "lat": 21.7010,
-    "lng": 72.9910,
+    "lat": 21.701,
+    "lng": 72.991,
     "severity": "HIGH",
     "priority": "High",
     "confidence": 91.2,
@@ -94,9 +94,9 @@
       "weatherCondition": "Monsoon Drizzle / Wet Asphalt"
     },
     "estimatedDimensions": {
-      "lengthM": 28.0,
+      "lengthM": 28,
       "widthM": 7.2,
-      "waterDepthCm": 18.0,
+      "waterDepthCm": 18,
       "blockedLanes": 2
     },
     "roadCondition": "Hazardous",
@@ -130,8 +130,8 @@
     "type": "road_damage",
     "title": "Extensive Alligator Fatigue Cracking & Surface Subsidence",
     "locationName": "GIDC Phase 1 Industrial Bypass, Km 3.8, Bharuch",
-    "lat": 21.7310,
-    "lng": 73.0020,
+    "lat": 21.731,
+    "lng": 73.002,
     "severity": "MEDIUM",
     "priority": "Medium",
     "confidence": 88.5,
@@ -155,7 +155,7 @@
       }
     ],
     "telemetry": {
-      "speedKmh": 48.0,
+      "speedKmh": 48,
       "zVibrationG": 1.45,
       "roadRoughnessIRI": 4.9,
       "cameraFov": "120° Wide Angle Front Dashcam",
@@ -182,8 +182,8 @@
     "type": "accident",
     "title": "Vehicle Collision & Carriageway Debris Field",
     "locationName": "NH-48 Express Highway Junction, Km 182, Bharuch",
-    "lat": 21.7240,
-    "lng": 73.0180,
+    "lat": 21.724,
+    "lng": 73.018,
     "severity": "HIGH",
     "priority": "Critical",
     "confidence": 96.1,
@@ -212,7 +212,7 @@
       }
     ],
     "telemetry": {
-      "speedKmh": 12.0,
+      "speedKmh": 12,
       "zVibrationG": 0.88,
       "roadRoughnessIRI": 6.2,
       "cameraFov": "120° Wide Angle Front Dashcam",
@@ -252,8 +252,8 @@
     "type": "pothole",
     "title": "Surface Pothole & Edge Breakaway (Repaired & Solved)",
     "locationName": "Zadeshwar Road, Near Narmada River Bund, Bharuch",
-    "lat": 21.6880,
-    "lng": 73.0150,
+    "lat": 21.688,
+    "lng": 73.015,
     "severity": "LOW",
     "priority": "Low",
     "confidence": 92.4,
@@ -290,7 +290,7 @@
     },
     "estimatedDimensions": {
       "depthCm": 0,
-      "lengthM": 1.0,
+      "lengthM": 1,
       "widthM": 0.8
     },
     "roadCondition": "Repaired",
@@ -321,6 +321,405 @@
         "timestamp": "2026-09-16 08:45:00 IST",
         "author": "PWD Municipal Road Division",
         "note": "Repairs completed and verified."
+      }
+    ]
+  },
+  {
+    "id": "RV-0006",
+    "type": "waterlogging",
+    "title": "Road Waterlogging & Ponding Submergence",
+    "locationName": "Location not selected",
+    "lat": 0,
+    "lng": 0,
+    "hasSelectedLocation": false,
+    "severity": "HIGH",
+    "priority": "Critical",
+    "confidence": 96.6,
+    "busId": "BUS-07",
+    "busRoute": "Route 4B (Station - GIDC Industrial)",
+    "timestamp": "2026-09-17 11:22:14 IST",
+    "videoTimestamp": "Uploaded Frame",
+    "sourceMedia": {
+      "fileName": "Screenshot 2026-09-16 064301.png",
+      "fileType": "image",
+      "busIdTag": "BUS-07",
+      "corridor": "Route 4B (Station - GIDC Industrial)",
+      "uploadTime": "2026-09-17 11:22:14 IST",
+      "locationMappingMethod": "LOCATION_NOT_SELECTED"
+    },
+    "status": "Pending",
+    "verification": "Pending Verification",
+    "source": "Uploaded Image / Video",
+    "evidenceImage": "/results/result_1789644133232_vgexs8d.jpg?t=1789644134464",
+    "boundingBoxes": [
+      {
+        "id": "box-1789644134483-0",
+        "label": "waterlogging_detected",
+        "confidence": 96.6,
+        "x": 28,
+        "y": 47.7,
+        "width": 36,
+        "height": 28.1,
+        "color": "#ef4444"
+      }
+    ],
+    "telemetry": {
+      "speedKmh": 36.5,
+      "zVibrationG": 2.45,
+      "roadRoughnessIRI": 5.6,
+      "cameraFov": "Uploaded Survey Media",
+      "weatherCondition": "Standard Survey Lighting"
+    },
+    "estimatedDimensions": {
+      "lengthM": 1.8,
+      "widthM": 1.2,
+      "blockedLanes": 2
+    },
+    "roadCondition": "Critical",
+    "priorityScore": 93,
+    "workflowHistory": [
+      {
+        "stage": "Detected",
+        "timestamp": "2026-09-17 11:22:14 IST",
+        "note": "AI YOLOv8 model detected waterlogging with 96.6% confidence from uploaded media."
+      }
+    ]
+  },
+  {
+    "id": "RV-0007",
+    "type": "waterlogging",
+    "title": "Road Waterlogging & Ponding Submergence",
+    "locationName": "Location not selected",
+    "lat": 0,
+    "lng": 0,
+    "hasSelectedLocation": false,
+    "severity": "HIGH",
+    "priority": "Critical",
+    "confidence": 92.4,
+    "busId": "BUS-07",
+    "busRoute": "Survey Transit Corridor",
+    "timestamp": "2026-09-17 13:36:10 IST",
+    "status": "Pending",
+    "verification": "Pending Verification",
+    "source": "Uploaded Image / Video",
+    "evidenceImage": "/results/result_1789652169281_s44wj27.jpg?t=1789652170948",
+    "boundingBoxes": [
+      {
+        "id": "box-1789652170960-0",
+        "label": "waterlogging_detected",
+        "confidence": 92.4,
+        "x": 28,
+        "y": 48,
+        "width": 36,
+        "height": 28,
+        "color": "#ef4444"
+      }
+    ],
+    "telemetry": {
+      "speedKmh": 36.5,
+      "zVibrationG": 2.45,
+      "roadRoughnessIRI": 5.6,
+      "cameraFov": "Uploaded Survey Media",
+      "weatherCondition": "Standard Survey Lighting"
+    },
+    "estimatedDimensions": {
+      "lengthM": 1.8,
+      "widthM": 1.2,
+      "blockedLanes": 2
+    },
+    "roadCondition": "Critical",
+    "priorityScore": 81,
+    "workflowHistory": [
+      {
+        "stage": "Detected",
+        "timestamp": "2026-09-17 13:36:10 IST",
+        "note": "AI YOLOv8 model detected waterlogging with 92.4% confidence from uploaded media."
+      }
+    ]
+  },
+  {
+    "id": "RV-0008",
+    "type": "road_damage",
+    "title": "Transverse Asphalt Fatigue Cracks",
+    "locationName": "Location not selected",
+    "lat": 0,
+    "lng": 0,
+    "hasSelectedLocation": false,
+    "severity": "MEDIUM",
+    "priority": "Medium",
+    "confidence": 89.1,
+    "busId": "BUS-07",
+    "busRoute": "Survey Transit Corridor",
+    "timestamp": "2026-09-17 13:36:10 IST",
+    "status": "Pending",
+    "verification": "Pending Verification",
+    "source": "Uploaded Image / Video",
+    "evidenceImage": "/results/result_1789652169281_s44wj27.jpg?t=1789652170948",
+    "boundingBoxes": [
+      {
+        "id": "box-1789652170960-1",
+        "label": "road_damage_detected",
+        "confidence": 89.1,
+        "x": 62,
+        "y": 62,
+        "width": 26,
+        "height": 22,
+        "color": "#f59e0b"
+      }
+    ],
+    "telemetry": {
+      "speedKmh": 36.5,
+      "zVibrationG": 1.35,
+      "roadRoughnessIRI": 5.6,
+      "cameraFov": "Uploaded Survey Media",
+      "weatherCondition": "Standard Survey Lighting"
+    },
+    "estimatedDimensions": {
+      "lengthM": 1.8,
+      "widthM": 1.2,
+      "blockedLanes": 1
+    },
+    "roadCondition": "Poor",
+    "priorityScore": 90,
+    "workflowHistory": [
+      {
+        "stage": "Detected",
+        "timestamp": "2026-09-17 13:36:10 IST",
+        "note": "AI YOLOv8 model detected road_damage with 89.1% confidence from uploaded media."
+      }
+    ]
+  },
+  {
+    "id": "RV-0009",
+    "type": "pothole",
+    "title": "Severe Asphalt Pothole Cavity Cluster",
+    "locationName": "Location not selected",
+    "lat": 0,
+    "lng": 0,
+    "hasSelectedLocation": false,
+    "severity": "HIGH",
+    "priority": "Critical",
+    "confidence": 93.3,
+    "busId": "BUS-07",
+    "busRoute": "Survey Transit Corridor",
+    "timestamp": "2026-09-17 13:38:13 IST",
+    "status": "Pending",
+    "verification": "Pending Verification",
+    "source": "Uploaded Image / Video",
+    "evidenceImage": "/results/result_1789652292982_4ou5jox.jpg?t=1789652293042",
+    "boundingBoxes": [
+      {
+        "id": "box-1789652293042-0",
+        "label": "pothole_detected",
+        "confidence": 93.3,
+        "x": 26.9,
+        "y": 53.8,
+        "width": 34.6,
+        "height": 26.9,
+        "color": "#ef4444"
+      }
+    ],
+    "telemetry": {
+      "speedKmh": 36.5,
+      "zVibrationG": 2.45,
+      "roadRoughnessIRI": 5.6,
+      "cameraFov": "Uploaded Survey Media",
+      "weatherCondition": "Standard Survey Lighting"
+    },
+    "estimatedDimensions": {
+      "depthCm": 7.6,
+      "lengthM": 1.8,
+      "widthM": 1.2,
+      "blockedLanes": 2
+    },
+    "roadCondition": "Critical",
+    "priorityScore": 89,
+    "workflowHistory": [
+      {
+        "stage": "Detected",
+        "timestamp": "2026-09-17 13:38:13 IST",
+        "note": "AI YOLOv8 model detected pothole with 93.3% confidence from uploaded media."
+      }
+    ]
+  },
+  {
+    "id": "RV-0010",
+    "type": "pothole",
+    "title": "Severe Asphalt Pothole Cavity Cluster",
+    "locationName": "Bharuch Bypass Junction, Gujarat",
+    "lat": 21.705136,
+    "lng": 72.995875,
+    "location": {
+      "latitude": 21.705136,
+      "longitude": 72.995875,
+      "city": "",
+      "district": "",
+      "state": "",
+      "country": "",
+      "address": "Bharuch Bypass Junction, Gujarat",
+      "formattedAddress": "Bharuch Bypass Junction, Gujarat"
+    },
+    "hasSelectedLocation": true,
+    "googleMapsUrl": "https://www.google.com/maps?q=21.705136,72.995875",
+    "severity": "HIGH",
+    "priority": "Critical",
+    "confidence": 93.3,
+    "busId": "BUS-07",
+    "busRoute": "Survey Transit Corridor",
+    "timestamp": "2026-09-17 13:40:46 IST",
+    "status": "Pending",
+    "verification": "Pending Verification",
+    "source": "Uploaded Image / Video",
+    "evidenceImage": "/results/result_1789652446854_7w557u3.jpg?t=1789652446896",
+    "boundingBoxes": [
+      {
+        "id": "box-1789652446914-0",
+        "label": "pothole_detected",
+        "confidence": 93.3,
+        "x": 26.9,
+        "y": 53.8,
+        "width": 34.6,
+        "height": 26.9,
+        "color": "#ef4444"
+      }
+    ],
+    "telemetry": {
+      "speedKmh": 36.5,
+      "zVibrationG": 2.45,
+      "roadRoughnessIRI": 5.6,
+      "cameraFov": "Uploaded Survey Media",
+      "weatherCondition": "Standard Survey Lighting"
+    },
+    "estimatedDimensions": {
+      "depthCm": 7.6,
+      "lengthM": 1.8,
+      "widthM": 1.2,
+      "blockedLanes": 2
+    },
+    "roadCondition": "Critical",
+    "priorityScore": 85,
+    "workflowHistory": [
+      {
+        "stage": "Detected",
+        "timestamp": "2026-09-17 13:40:46 IST",
+        "note": "AI YOLOv8 model detected pothole with 93.3% confidence from uploaded media at Bharuch Bypass Junction, Gujarat."
+      }
+    ]
+  },
+  {
+    "id": "RV-0011",
+    "type": "pothole",
+    "title": "Severe Asphalt Pothole Cavity Cluster",
+    "locationName": "Vadodara Central Bus Station",
+    "lat": 22.307159,
+    "lng": 73.181219,
+    "location": {
+      "latitude": 22.307159,
+      "longitude": 73.181219,
+      "city": "",
+      "district": "",
+      "state": "",
+      "country": "",
+      "address": "Vadodara Central Bus Station",
+      "formattedAddress": "Vadodara Central Bus Station"
+    },
+    "hasSelectedLocation": true,
+    "googleMapsUrl": "https://www.google.com/maps?q=22.307159,73.181219",
+    "severity": "HIGH",
+    "priority": "Critical",
+    "confidence": 93.3,
+    "busId": "BUS-07",
+    "busRoute": "Survey Transit Corridor",
+    "timestamp": "2026-09-17 13:40:49 IST",
+    "status": "Pending",
+    "verification": "Pending Verification",
+    "source": "Uploaded Image / Video",
+    "evidenceImage": "/results/result_1789652449727_zkaq0pf.jpg?t=1789652449744",
+    "boundingBoxes": [
+      {
+        "id": "box-1789652449745-0",
+        "label": "pothole_detected",
+        "confidence": 93.3,
+        "x": 26.9,
+        "y": 53.8,
+        "width": 34.6,
+        "height": 26.9,
+        "color": "#ef4444"
+      }
+    ],
+    "telemetry": {
+      "speedKmh": 36.5,
+      "zVibrationG": 2.45,
+      "roadRoughnessIRI": 5.6,
+      "cameraFov": "Uploaded Survey Media",
+      "weatherCondition": "Standard Survey Lighting"
+    },
+    "estimatedDimensions": {
+      "depthCm": 7.6,
+      "lengthM": 1.8,
+      "widthM": 1.2,
+      "blockedLanes": 2
+    },
+    "roadCondition": "Critical",
+    "priorityScore": 81,
+    "workflowHistory": [
+      {
+        "stage": "Detected",
+        "timestamp": "2026-09-17 13:40:49 IST",
+        "note": "AI YOLOv8 model detected pothole with 93.3% confidence from uploaded media at Vadodara Central Bus Station."
+      }
+    ]
+  },
+  {
+    "id": "RV-0012",
+    "type": "pothole",
+    "title": "Severe Asphalt Pothole Cavity Cluster",
+    "locationName": "Location not selected",
+    "lat": 0,
+    "lng": 0,
+    "hasSelectedLocation": false,
+    "severity": "HIGH",
+    "priority": "Critical",
+    "confidence": 93.3,
+    "busId": "BUS-07",
+    "busRoute": "Survey Transit Corridor",
+    "timestamp": "2026-09-17 13:42:20 IST",
+    "status": "Pending",
+    "verification": "Pending Verification",
+    "source": "Uploaded Image / Video",
+    "evidenceImage": "/results/result_1789652540554_w6u1jd0.jpg?t=1789652540590",
+    "boundingBoxes": [
+      {
+        "id": "box-1789652540608-0",
+        "label": "pothole_detected",
+        "confidence": 93.3,
+        "x": 26.9,
+        "y": 53.8,
+        "width": 34.6,
+        "height": 26.9,
+        "color": "#ef4444"
+      }
+    ],
+    "telemetry": {
+      "speedKmh": 36.5,
+      "zVibrationG": 2.45,
+      "roadRoughnessIRI": 5.6,
+      "cameraFov": "Uploaded Survey Media",
+      "weatherCondition": "Standard Survey Lighting"
+    },
+    "estimatedDimensions": {
+      "depthCm": 7.6,
+      "lengthM": 1.8,
+      "widthM": 1.2,
+      "blockedLanes": 2
+    },
+    "roadCondition": "Critical",
+    "priorityScore": 83,
+    "workflowHistory": [
+      {
+        "stage": "Detected",
+        "timestamp": "2026-09-17 13:42:20 IST",
+        "note": "AI YOLOv8 model detected pothole with 93.3% confidence from uploaded media."
       }
     ]
   }
