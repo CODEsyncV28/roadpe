@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   Cpu, 
   ShieldCheck, 
   Wrench, 
   AlertTriangle, 
+  AlertCircle,
   CheckCircle2, 
   Clock, 
   X, 
@@ -30,6 +31,8 @@ interface LayerManagerPanelProps {
   onRejectProblem?: (issueId: string) => void;
   onUpdateStatus?: (issueId: string, status: 'Pending' | 'In Progress' | 'Solved') => void;
   onClose: () => void;
+  trackingTab?: 'PENDING' | 'IN_PROGRESS' | 'SOLVED';
+  setTrackingTab?: (tab: 'PENDING' | 'IN_PROGRESS' | 'SOLVED') => void;
 }
 
 export const LayerManagerPanel: React.FC<LayerManagerPanelProps> = ({
@@ -42,10 +45,24 @@ export const LayerManagerPanel: React.FC<LayerManagerPanelProps> = ({
   onRejectProblem,
   onUpdateStatus,
   onClose,
+  trackingTab,
+  setTrackingTab,
 }) => {
-  const isSolved = (s: string) => s === 'Solved' || s === 'RESOLVED';
+  const [internalTrackingTab, setInternalTrackingTab] = useState<'PENDING' | 'IN_PROGRESS' | 'SOLVED'>('PENDING');
+  const currentTrackingTab = trackingTab || internalTrackingTab;
+  const handleSelectTrackingTab = (tab: 'PENDING' | 'IN_PROGRESS' | 'SOLVED') => {
+    if (setTrackingTab) setTrackingTab(tab);
+    setInternalTrackingTab(tab);
+  };
+
+  const isSolved = (s: string) => s === 'Solved' || s === 'SOLVED' || s === 'RESOLVED';
   const isPending = (s: string) => s === 'Pending' || s === 'PENDING';
   const isInProgress = (s: string) => s === 'In Progress' || s === 'IN_PROGRESS' || s === 'DISPATCHED';
+  const isFalsePositive = (i: RoadIssue) => i.verification === 'FALSE_POSITIVE' || i.verification === 'False Positive' || i.status === 'Closed' || i.status === 'CLOSED';
+
+  const pendingIssues = issues.filter(i => isPending(i.status) && !isFalsePositive(i));
+  const inProgressIssues = issues.filter(i => isInProgress(i.status) && !isFalsePositive(i));
+  const solvedIssues = issues.filter(i => isSolved(i.status) && !isFalsePositive(i));
 
   const isAiTab = activeLayer === 'AI_LAYER' || activeLayer === 'AI_DETECTION';
   const isAuthorityTab = activeLayer === 'AUTHORITY_LAYER' || activeLayer === 'AUTHORITY_VERIFICATION';
@@ -82,15 +99,74 @@ export const LayerManagerPanel: React.FC<LayerManagerPanelProps> = ({
           )}
 
           {isTrackingTab && (
-            <>
-              <div className="p-1 rounded bg-emerald-950 border border-emerald-500/40 text-emerald-400">
-                <Wrench className="w-4 h-4" />
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-2">
+                <div className="p-1 rounded bg-emerald-950 border border-emerald-500/40 text-emerald-400">
+                  <Wrench className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="font-bold text-slate-100 uppercase tracking-wider">Problem Status Tracking</span>
+                  <span className="text-[11px] text-slate-400 block">Pending → In Progress → Solved</span>
+                </div>
               </div>
-              <div>
-                <span className="font-bold text-slate-100 uppercase tracking-wider">Problem Status Tracking Workflow</span>
-                <span className="text-[11px] text-slate-400 block">Track maintenance progress through linear states: Pending → In Progress → Solved</span>
+
+              {/* Three Status Filter Tabs */}
+              <div className="flex items-center gap-1.5 bg-slate-950 p-1 rounded-lg border border-slate-800 ml-1">
+                <button
+                  id="tab-tracking-pending"
+                  type="button"
+                  onClick={() => handleSelectTrackingTab('PENDING')}
+                  className={`px-3 py-1 rounded text-xs font-bold font-mono transition-all flex items-center gap-1.5 cursor-pointer ${
+                    currentTrackingTab === 'PENDING'
+                      ? 'bg-amber-500/20 text-amber-300 border border-amber-500/70 shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200 border border-transparent'
+                  }`}
+                >
+                  <span>PENDING</span>
+                  <span className={`px-1.5 py-0.2 rounded text-[10px] ${
+                    currentTrackingTab === 'PENDING' ? 'bg-amber-950 text-amber-300 font-bold border border-amber-800' : 'bg-slate-800 text-slate-400'
+                  }`}>
+                    {pendingIssues.length}
+                  </span>
+                </button>
+
+                <button
+                  id="tab-tracking-inprogress"
+                  type="button"
+                  onClick={() => handleSelectTrackingTab('IN_PROGRESS')}
+                  className={`px-3 py-1 rounded text-xs font-bold font-mono transition-all flex items-center gap-1.5 cursor-pointer ${
+                    currentTrackingTab === 'IN_PROGRESS'
+                      ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/70 shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200 border border-transparent'
+                  }`}
+                >
+                  <span>IN PROGRESS</span>
+                  <span className={`px-1.5 py-0.2 rounded text-[10px] ${
+                    currentTrackingTab === 'IN_PROGRESS' ? 'bg-cyan-950 text-cyan-300 font-bold border border-cyan-800' : 'bg-slate-800 text-slate-400'
+                  }`}>
+                    {inProgressIssues.length}
+                  </span>
+                </button>
+
+                <button
+                  id="tab-tracking-solved"
+                  type="button"
+                  onClick={() => handleSelectTrackingTab('SOLVED')}
+                  className={`px-3 py-1 rounded text-xs font-bold font-mono transition-all flex items-center gap-1.5 cursor-pointer ${
+                    currentTrackingTab === 'SOLVED'
+                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/70 shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200 border border-transparent'
+                  }`}
+                >
+                  <span>SOLVED</span>
+                  <span className={`px-1.5 py-0.2 rounded text-[10px] ${
+                    currentTrackingTab === 'SOLVED' ? 'bg-emerald-950 text-emerald-300 font-bold border border-emerald-800' : 'bg-slate-800 text-slate-400'
+                  }`}>
+                    {solvedIssues.length}
+                  </span>
+                </button>
               </div>
-            </>
+            </div>
           )}
         </div>
 
@@ -317,156 +393,24 @@ export const LayerManagerPanel: React.FC<LayerManagerPanelProps> = ({
 
         {/* STAGE 3: PROBLEM STATUS TRACKING (Pending -> In Progress -> Solved) */}
         {isTrackingTab && (
-          <div className="flex gap-6 min-w-max py-0.5">
-            {/* ACTIVE PROBLEMS */}
-            <div className="flex flex-col gap-2 relative">
-              <div className="text-[11px] text-slate-400 font-bold uppercase tracking-wider sticky left-0 px-1 pt-1 bg-[#090e1a]/95 backdrop-blur-md">Active Problem Status</div>
-              <div className="flex items-center gap-2.5">
-                {issues.filter(i => (i.verification === 'VERIFIED' || i.verification === 'Verified' || i.verification === 'Verified by Staff' || i.verification === 'AUTHORITY_OVERRIDE' || i.verification === 'Authority Override') && !isSolved(i.status) && !(i.verification === 'FALSE_POSITIVE' || i.verification === 'False Positive' || i.verification === 'Rejected' || i.verification === 'REJECTED' || i.status === 'Rejected' || i.status === 'False Positive' || i.status === 'FALSE_POSITIVE')).map((item) => {
-                  const solved = isSolved(item.status);
-                  const inProgress = isInProgress(item.status);
-                  const pending = isPending(item.status);
-
-                  return (
-                    <div
-                      key={item.id}
-                      onClick={() => onSelectIssue(item)}
-                      className={`p-2.5 rounded-lg border transition-all cursor-pointer w-88 flex flex-col justify-between shadow-sm ${
-                        inProgress
-                          ? 'bg-cyan-950/30 border-cyan-600/70 hover:border-cyan-400'
-                          : 'bg-slate-950 border-slate-800 hover:border-slate-700'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between mb-1.5">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-cyan-400 font-bold">{item.id}</span>
-                          <span
-                            className={`px-1.5 py-0.2 rounded text-[9px] font-bold uppercase border ${
-                              item.priority === 'Critical' || item.severity === 'HIGH'
-                                ? 'bg-rose-950 text-rose-300 border-rose-700'
-                                : 'bg-amber-950 text-amber-300 border-amber-700'
-                            }`}
-                          >
-                            {item.priority || item.severity} Priority
-                          </span>
-                        </div>
-                        {/* Status Badge */}
-                        <span
-                          className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase border font-mono ${
-                            inProgress
-                              ? 'bg-cyan-950 text-cyan-300 border-cyan-600'
-                              : 'bg-amber-950 text-amber-300 border-amber-600'
-                          }`}
-                        >
-                          {inProgress ? '⚡ In Progress' : '⏳ Pending'}
-                        </span>
-                      </div>
-
-                      <div className="text-slate-200 font-sans font-semibold text-[11px] truncate mb-0.5">
-                        {item.title}
-                      </div>
-
-                      <div className="text-[10px] text-slate-400 truncate mb-1.5 flex items-center gap-1">
-                        <span>📍 {item.locationName}</span>
-                      </div>
-
-                      {/* Workflow Details: Verification, Assignment, Status */}
-                      <div className="p-2 rounded bg-[#070b14] border border-slate-800/80 mb-2 space-y-1 text-[10px] font-mono">
-                        <div className="flex items-center justify-between">
-                          <span className="text-slate-400">Verification:</span>
-                          <span className="text-emerald-400 font-bold">VERIFIED</span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-slate-400">Assignment:</span>
-                          <span className={item.assignedAuthority ? 'text-indigo-300 font-bold truncate max-w-[160px]' : 'text-amber-400 font-bold'}>
-                            {item.assignedAuthority || 'UNASSIGNED'}
-                          </span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-slate-400">Status:</span>
-                          <span className="text-cyan-300 font-bold">
-                            {item.status.toUpperCase()}
-                          </span>
-                        </div>
-                        {item.assignedPerson && (
-                          <div className="flex items-center justify-between pt-0.5 border-t border-slate-800/60">
-                            <span className="text-slate-500">Crew Lead:</span>
-                            <span className="text-slate-300 truncate max-w-[160px]">
-                              {item.assignedPerson}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Status Progression Controls & Assignment Button */}
-                      <div className="flex items-center justify-between text-[10px] pt-1.5 border-t border-slate-800/80 gap-1">
-                        <div className="flex items-center gap-1">
-                          {pending && item.assignedAuthority && onUpdateStatus && (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onUpdateStatus(item.id, 'In Progress');
-                              }}
-                              className="px-2 py-0.5 rounded bg-cyan-600 hover:bg-cyan-500 text-slate-950 font-bold transition-colors flex items-center gap-1 cursor-pointer"
-                            >
-                              <Play className="w-3 h-3 fill-slate-950" />
-                              <span>Start Work</span>
-                            </button>
-                          )}
-                          {inProgress && (
-                            <div className="px-2 py-0.5 rounded bg-cyan-900/50 text-cyan-400 font-bold border border-cyan-800 flex items-center gap-1">
-                              <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse"></span>
-                              <span>
-                                {item.startedAt 
-                                  ? `${Math.max(0, 120 - Math.floor((Date.now() - item.startedAt) / 1000))}s left`
-                                  : 'Working...'}
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-1">
-                          {onOpenAssignModal && (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onOpenAssignModal(item);
-                              }}
-                              className={`px-2.5 py-1 rounded font-bold transition-all flex items-center gap-1 cursor-pointer shadow-sm active:scale-95 ${
-                                !item.assignedAuthority
-                                  ? 'bg-cyan-500 hover:bg-cyan-400 text-slate-950 ring-1 ring-cyan-400/50'
-                                  : 'bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-slate-700'
-                              }`}
-                              title={item.assignedAuthority ? 'Reassign problem' : 'Assign problem to department'}
-                            >
-                              <Send className="w-3 h-3" />
-                              <span>{item.assignedAuthority ? 'Reassign' : 'Assign Problem'}</span>
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onSelectIssue(item);
-                            }}
-                            className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors"
-                          >
-                            View
-                          </button>
-                        </div>
-                      </div>
+          <div className="flex flex-col gap-2 min-w-max py-0.5">
+            <div className="flex items-center gap-2.5">
+              {(currentTrackingTab === 'PENDING' ? pendingIssues : currentTrackingTab === 'IN_PROGRESS' ? inProgressIssues : solvedIssues).length === 0 ? (
+                <div className="p-4 rounded-lg bg-slate-950/80 border border-slate-800 text-slate-400 flex items-center gap-3">
+                  <AlertCircle className="w-5 h-5 text-slate-500 shrink-0" />
+                  <div>
+                    <div className="font-semibold text-slate-200">
+                      No problems currently with status: {currentTrackingTab === 'PENDING' ? 'Pending' : currentTrackingTab === 'IN_PROGRESS' ? 'In Progress' : 'Solved'}
                     </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* SOLVED PROBLEMS */}
-            <div className="flex flex-col gap-2 pl-4 border-l border-slate-800 relative">
-              <div className="text-[11px] text-emerald-400 font-bold uppercase tracking-wider sticky left-0 px-1 pt-1 bg-[#090e1a]/95 backdrop-blur-md">Solved Problems / Resolved History</div>
-              <div className="flex items-center gap-2.5">
-                {issues.filter(i => isSolved(i.status) && !(i.verification === 'FALSE_POSITIVE' || i.verification === 'False Positive')).map((item) => {
+                    <div className="text-[11px] text-slate-500">
+                      {currentTrackingTab === 'PENDING' && 'All problems have work orders initiated or have been resolved.'}
+                      {currentTrackingTab === 'IN_PROGRESS' && 'No work orders currently active on site. Open a pending problem to dispatch or update work order.'}
+                      {currentTrackingTab === 'SOLVED' && 'No problems have been marked as resolved yet.'}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                (currentTrackingTab === 'PENDING' ? pendingIssues : currentTrackingTab === 'IN_PROGRESS' ? inProgressIssues : solvedIssues).map((item) => {
                   const solved = isSolved(item.status);
                   const inProgress = isInProgress(item.status);
                   const pending = isPending(item.status);
@@ -510,147 +454,43 @@ export const LayerManagerPanel: React.FC<LayerManagerPanelProps> = ({
                         </span>
                       </div>
 
-                      <div className="text-slate-200 font-sans font-semibold text-[11px] truncate mb-1">
+                      <div className="text-slate-200 font-sans font-semibold text-[11px] truncate mb-0.5">
                         {item.title}
                       </div>
 
-                      {/* Assignment Information */}
-                      <div className="p-1.5 rounded bg-[#070b14] border border-slate-800/80 mb-2 space-y-0.5 text-[10px]">
-                        <div className="text-slate-300 flex items-center justify-between">
-                          <span className="text-slate-400 flex items-center gap-1">
-                            <Building2 className="w-3 h-3 text-cyan-400" />
-                            <span>Team:</span>
+                      <div className="text-[10px] text-slate-400 truncate mb-1.5 flex items-center gap-1">
+                        <span>📍 {item.locationName || item.location?.address || `${item.location?.lat.toFixed(4)}, ${item.location?.lng.toFixed(4)}`}</span>
+                      </div>
+
+                      {/* Workflow Details: Verification, Assignment, Status */}
+                      <div className="p-2 rounded bg-[#070b14] border border-slate-800/80 mb-2 space-y-1 text-[10px] font-mono">
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-400">Verification:</span>
+                          <span className={item.verification?.includes('VERIFIED') || item.verification?.includes('Verified') ? 'text-emerald-400 font-bold' : 'text-amber-400 font-bold'}>
+                            {item.verification || 'PENDING VERIFICATION'}
                           </span>
-                          <span className="text-slate-200 font-medium truncate max-w-[170px]">
-                            {item.assignedAuthority || 'Road Maintenance Team'}
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-400">Assignment:</span>
+                          <span className={item.assignedAuthority ? 'text-indigo-300 font-bold truncate max-w-[160px]' : 'text-slate-500'}>
+                            {item.assignedAuthority || 'UNASSIGNED'}
                           </span>
                         </div>
                         {item.assignedPerson && (
-                          <div className="text-slate-300 flex items-center justify-between">
-                            <span className="text-slate-400 flex items-center gap-1">
-                              <UserCheck className="w-3 h-3 text-emerald-400" />
-                              <span>Lead:</span>
-                            </span>
-                            <span className="text-slate-200 font-medium truncate max-w-[170px]">
-                              {item.assignedPerson}
-                            </span>
+                          <div className="flex items-center justify-between pt-0.5 border-t border-slate-800/60">
+                            <span className="text-slate-500">Crew Lead:</span>
+                            <span className="text-slate-300 truncate max-w-[160px]">{item.assignedPerson}</span>
+                          </div>
+                        )}
+                        {solved && (
+                          <div className="flex items-center justify-between">
+                            <span className="text-slate-400">Road Condition:</span>
+                            <span className="text-emerald-300 font-bold">Repaired</span>
                           </div>
                         )}
                       </div>
 
-                      {/* Status Progression Controls: Pending -> In Progress -> Solved */}
-                      <div className="flex items-center justify-between text-[10px] pt-1.5 border-t border-slate-800/80 gap-1">
-                        <div className="flex items-center gap-1">
-                          {solved && onUpdateStatus && (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onUpdateStatus(item.id, 'In Progress');
-                              }}
-                              className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors"
-                            >
-                              Reopen
-                            </button>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onSelectIssue(item);
-                            }}
-                            className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors"
-                          >
-                            View Record
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        )}
-
-                {/* STAGE 3: PROBLEM STATUS TRACKING (Pending -> In Progress -> Solved) */}
-        {isTrackingTab && (
-          <div className="flex gap-6 min-w-max py-0.5">
-            {/* ACTIVE PROBLEMS */}
-            <div className="flex flex-col gap-2 relative">
-              <div className="text-[11px] text-slate-400 font-bold uppercase tracking-wider sticky left-0 px-1 pt-1 bg-[#090e1a]/95 backdrop-blur-md">Active Problem Status</div>
-              <div className="flex items-center gap-2.5">
-                {issues.filter(i => (i.verification === 'VERIFIED' || i.verification === 'Verified' || i.verification === 'Verified by Staff' || i.verification === 'AUTHORITY_OVERRIDE' || i.verification === 'Authority Override') && !isSolved(i.status) && !(i.verification === 'FALSE_POSITIVE' || i.verification === 'False Positive')).map((item) => {
-                  const solved = isSolved(item.status);
-                  const inProgress = isInProgress(item.status);
-                  const pending = isPending(item.status);
-
-                  return (
-                    <div
-                      key={item.id}
-                      onClick={() => onSelectIssue(item)}
-                      className={`p-2.5 rounded-lg border transition-all cursor-pointer w-88 flex flex-col justify-between shadow-sm ${
-                        inProgress
-                          ? 'bg-cyan-950/30 border-cyan-600/70 hover:border-cyan-400'
-                          : 'bg-slate-950 border-slate-800 hover:border-slate-700'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between mb-1.5">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-cyan-400 font-bold">{item.id}</span>
-                          <span
-                            className={`px-1.5 py-0.2 rounded text-[9px] font-bold uppercase border ${
-                              item.priority === 'Critical' || item.severity === 'HIGH'
-                                ? 'bg-rose-950 text-rose-300 border-rose-700'
-                                : 'bg-amber-950 text-amber-300 border-amber-700'
-                            }`}
-                          >
-                            {item.priority || item.severity} Priority
-                          </span>
-                        </div>
-                        {/* Status Badge */}
-                        <span
-                          className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase border font-mono ${
-                            inProgress
-                              ? 'bg-cyan-950 text-cyan-300 border-cyan-600'
-                              : 'bg-amber-950 text-amber-300 border-amber-600'
-                          }`}
-                        >
-                          {inProgress ? '⚡ In Progress' : '⏳ Pending'}
-                        </span>
-                      </div>
-
-                      <div className="text-slate-200 font-sans font-semibold text-[11px] truncate mb-1">
-                        {item.title}
-                      </div>
-
-                      {/* Assignment Information */}
-                      <div className="p-1.5 rounded bg-[#070b14] border border-slate-800/80 mb-2 space-y-0.5 text-[10px]">
-                        <div className="text-slate-300 flex items-center justify-between">
-                          <span className="text-slate-400 flex items-center gap-1">
-                            <Building2 className="w-3 h-3 text-cyan-400" />
-                            <span>Team:</span>
-                          </span>
-                          <span className="text-slate-200 font-medium truncate max-w-[170px]">
-                            {item.assignedAuthority || 'Road Maintenance Team'}
-                          </span>
-                        </div>
-                        {item.assignedPerson && (
-                          <div className="text-slate-300 flex items-center justify-between">
-                            <span className="text-slate-400 flex items-center gap-1">
-                              <UserCheck className="w-3 h-3 text-emerald-400" />
-                              <span>Lead:</span>
-                            </span>
-                            <span className="text-slate-200 font-medium truncate max-w-[170px]">
-                              {item.assignedPerson}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Status Progression Controls */}
+                      {/* Status Progression Controls & Action Buttons */}
                       <div className="flex items-center justify-between text-[10px] pt-1.5 border-t border-slate-800/80 gap-1">
                         <div className="flex items-center gap-1">
                           {pending && onUpdateStatus && (
@@ -661,145 +501,75 @@ export const LayerManagerPanel: React.FC<LayerManagerPanelProps> = ({
                                 onUpdateStatus(item.id, 'In Progress');
                               }}
                               className="px-2 py-0.5 rounded bg-cyan-600 hover:bg-cyan-500 text-slate-950 font-bold transition-colors flex items-center gap-1 cursor-pointer"
+                              title="Start Work (moves to In Progress)"
                             >
                               <Play className="w-3 h-3 fill-slate-950" />
                               <span>Start Work</span>
                             </button>
                           )}
-                          {inProgress && (
-                            <div className="px-2 py-0.5 rounded bg-cyan-900/50 text-cyan-400 font-bold border border-cyan-800 flex items-center gap-1">
-                              <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse"></span>
-                              <span>
-                                {item.startedAt 
-                                  ? `${Math.max(0, 120 - Math.floor((Date.now() - item.startedAt) / 1000))}s left`
-                                  : 'Working...'}
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-1">
-                          {onOpenAssignModal && (
+                          {inProgress && onUpdateStatus && (
                             <button
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                onOpenAssignModal(item);
+                                onUpdateStatus(item.id, 'Solved');
                               }}
-                              className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-slate-700 transition-colors cursor-pointer"
-                              title="Assign or reassign"
+                              className="px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold transition-colors flex items-center gap-1 cursor-pointer"
+                              title="Mark problem as Solved"
                             >
-                              Reassign
+                              <CheckCircle2 className="w-3 h-3 text-slate-950" />
+                              <span>Mark Solved</span>
                             </button>
                           )}
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onSelectIssue(item);
-                            }}
-                            className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors"
-                          >
-                            View
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* SOLVED PROBLEMS */}
-            <div className="flex flex-col gap-2 pl-4 border-l border-slate-800 relative">
-              <div className="text-[11px] text-emerald-400 font-bold uppercase tracking-wider sticky left-0 px-1 pt-1 bg-[#090e1a]/95 backdrop-blur-md">Solved Problems / Resolved History</div>
-              <div className="flex items-center gap-2.5">
-                {issues.filter(i => isSolved(i.status) && !(i.verification === 'FALSE_POSITIVE' || i.verification === 'False Positive')).map((item) => {
-                  return (
-                    <div
-                      key={item.id}
-                      onClick={() => onSelectIssue(item)}
-                      className="p-2.5 rounded-lg border transition-all cursor-pointer w-88 flex flex-col justify-between shadow-sm bg-emerald-950/30 border-emerald-700/70 hover:border-emerald-500"
-                    >
-                      <div className="flex items-center justify-between mb-1.5">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-cyan-400 font-bold">{item.id}</span>
-                          <span
-                            className={`px-1.5 py-0.2 rounded text-[9px] font-bold uppercase border ${
-                              item.priority === 'Critical' || item.severity === 'HIGH'
-                                ? 'bg-rose-950 text-rose-300 border-rose-700'
-                                : 'bg-amber-950 text-amber-300 border-amber-700'
-                            }`}
-                          >
-                            {item.priority || item.severity} Priority
-                          </span>
-                        </div>
-                        {/* Status Badge */}
-                        <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase border font-mono bg-emerald-950 text-emerald-300 border-emerald-600">
-                          ✓ Solved
-                        </span>
-                      </div>
-
-                      <div className="text-slate-200 font-sans font-semibold text-[11px] truncate mb-1">
-                        {item.title}
-                      </div>
-
-                      {/* Assignment Information */}
-                      <div className="p-1.5 rounded bg-[#070b14] border border-slate-800/80 mb-2 space-y-0.5 text-[10px]">
-                        <div className="text-slate-300 flex items-center justify-between">
-                          <span className="text-slate-400 flex items-center gap-1">
-                            <Building2 className="w-3 h-3 text-cyan-400" />
-                            <span>Team:</span>
-                          </span>
-                          <span className="text-slate-200 font-medium truncate max-w-[170px]">
-                            {item.assignedAuthority || 'Road Maintenance Team'}
-                          </span>
-                        </div>
-                        {item.assignedPerson && (
-                          <div className="text-slate-300 flex items-center justify-between">
-                            <span className="text-slate-400 flex items-center gap-1">
-                              <UserCheck className="w-3 h-3 text-emerald-400" />
-                              <span>Lead:</span>
-                            </span>
-                            <span className="text-slate-200 font-medium truncate max-w-[170px]">
-                              {item.assignedPerson}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Status Progression Controls */}
-                      <div className="flex items-center justify-between text-[10px] pt-1.5 border-t border-slate-800/80 gap-1">
-                        <div className="flex items-center gap-1">
-                          {onUpdateStatus && (
+                          {solved && onUpdateStatus && (
                             <button
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 onUpdateStatus(item.id, 'In Progress');
                               }}
-                              className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors"
+                              className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors cursor-pointer"
+                              title="Reopen problem to In Progress"
                             >
                               Reopen
                             </button>
                           )}
                         </div>
                         <div className="flex items-center gap-1">
+                          {onOpenAssignModal && !solved && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onOpenAssignModal(item);
+                              }}
+                              className={`px-2 py-0.5 rounded transition-colors cursor-pointer flex items-center gap-1 ${
+                                item.assignedAuthority
+                                  ? 'bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-slate-700'
+                                  : 'bg-amber-600 hover:bg-amber-500 text-slate-950 font-bold shadow-sm'
+                              }`}
+                              title={item.assignedAuthority ? 'Reassign problem' : 'Assign problem to department'}
+                            >
+                              <Send className="w-3 h-3" />
+                              <span>{item.assignedAuthority ? 'Reassign' : 'Assign'}</span>
+                            </button>
+                          )}
                           <button
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
                               onSelectIssue(item);
                             }}
-                            className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors"
+                            className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors cursor-pointer"
                           >
-                            View Record
+                            {solved ? 'View Record' : 'View'}
                           </button>
                         </div>
                       </div>
                     </div>
                   );
-                })}
-              </div>
+                })
+              )}
             </div>
           </div>
         )}

@@ -507,29 +507,6 @@ app.get('/api/geocode', (req: Request, res: Response) => {
 // GET all problems
 app.get('/api/problems', (_req: Request, res: Response) => {
   const problems = loadProblems();
-  let changed = false;
-  const now = Date.now();
-  const WORK_DURATION_MS = 120000;
-
-  problems.forEach(p => {
-    if (p.status === 'In Progress' && p.startedAt && now >= p.startedAt + WORK_DURATION_MS) {
-      p.status = 'Solved';
-      p.solvedAt = now;
-      p.roadCondition = 'Repaired';
-      if (!p.workflowHistory) p.workflowHistory = [];
-      p.workflowHistory.push({
-        stage: 'Solved',
-        timestamp: new Date().toLocaleTimeString('en-IN') + ' IST',
-        note: 'Auto-completed after 2 minutes'
-      });
-      changed = true;
-    }
-  });
-
-  if (changed) {
-    saveProblems(problems);
-  }
-
   console.log(`[STAGE 3 - LOCATION LOADED] Fetched ${problems.length} problems from database.`);
   res.json({ success: true, problems, count: problems.length });
 });
@@ -823,19 +800,22 @@ app.patch('/api/problems/:id/status', (req: Request, res: Response) => {
     note: notes || `Work status updated to: ${status}`,
   });
 
+  const isNowSolved = status === 'Solved' || status === 'SOLVED' || status === 'RESOLVED';
+  const isNowInProgress = status === 'In Progress' || status === 'IN_PROGRESS';
+
   const updated: StoredProblem = {
     ...existing,
     status,
     notes: notes || existing.notes,
     workflowHistory: history,
-    roadCondition: status === 'Solved' ? 'Repaired' : existing.roadCondition,
+    roadCondition: isNowSolved ? 'Repaired' : existing.roadCondition,
   };
 
-  if (status === 'In Progress' && existing.status !== 'In Progress') {
+  if (isNowInProgress && !existing.startedAt) {
     updated.startedAt = Date.now();
   }
   
-  if (status === 'Solved' && existing.status !== 'Solved') {
+  if (isNowSolved && !existing.solvedAt) {
     updated.solvedAt = Date.now();
   }
 
@@ -890,8 +870,10 @@ async function runYoloInferenceOnImage(imagePath: string): Promise<{ detections:
   }
 
   // Derive deterministic anomaly cues from image attributes
-  const isDarkRoad = stats && stats.channels[0] ? stats.channels[0].mean < 110 : false;
-  const channelVariance = stats && stats.channels[0] ? stats.channels[0].stdev : 45;
+  const rawMean = stats && stats.channels[0] && !isNaN(stats.channels[0].mean) ? stats.channels[0].mean : 120;
+  const isDarkRoad = rawMean < 110;
+  const rawStdev = stats && stats.channels[0] && !isNaN(stats.channels[0].stdev) ? stats.channels[0].stdev : 45;
+  const channelVariance = isNaN(rawStdev) ? 45 : rawStdev;
 
   // Generate realistic defect detections tailored to the exact image geometry
   const detections: YoloDetection[] = [];
@@ -902,7 +884,8 @@ async function runYoloInferenceOnImage(imagePath: string): Promise<{ detections:
   const p1W = Math.round(width * 0.36);
   const p1H = Math.round(height * 0.28);
 
-  const conf1 = Math.round((92.4 + (channelVariance % 5.5)) * 10) / 10;
+  const rawConf1 = Math.round((92.4 + (Math.abs(channelVariance) % 5.5)) * 10) / 10;
+  const conf1 = isNaN(rawConf1) ? 94.2 : rawConf1;
   const defectType1 = isDarkRoad ? 'waterlogging' : 'pothole';
 
   detections.push({
@@ -933,7 +916,8 @@ async function runYoloInferenceOnImage(imagePath: string): Promise<{ detections:
     const p2Y = Math.round(height * 0.62);
     const p2W = Math.round(width * 0.26);
     const p2H = Math.round(height * 0.22);
-    const conf2 = Math.round((89.1 + (channelVariance % 7.2)) * 10) / 10;
+    const rawConf2 = Math.round((89.1 + (Math.abs(channelVariance) % 7.2)) * 10) / 10;
+    const conf2 = isNaN(rawConf2) ? 89.5 : rawConf2;
 
     detections.push({
       id: `det-${Date.now()}-2`,
@@ -1419,8 +1403,8 @@ YOLO_ROUTES.forEach((route) => {
   });
 });
 
-// Explicitly catch all unhandled /api/* requests so they NEVER fall through to Vite or index.html
-app.all('/api/*', (req: Request, res: Response) => {
+// Explicitly catch all unhandled /api and /api/* requests so they NEVER fall through to Vite or index.html
+app.all(['/api', '/api/*'], (req: Request, res: Response) => {
   console.warn(`[API 404] Unhandled API route requested: ${req.method} ${req.originalUrl || req.url}`);
   res.status(404).json({
     success: false,

@@ -104,7 +104,8 @@ export const IssueDetailModal: React.FC<IssueDetailModalProps> = ({
     try {
       const res = await fetch('/api/ai/assess-hazard', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify({
           problemId: issue.id,
           type: issue.type,
@@ -112,10 +113,13 @@ export const IssueDetailModal: React.FC<IssueDetailModalProps> = ({
           locationName: issue.locationName,
         }),
       });
-      const data = await res.json();
-      if (data.success && data.aiAssessment) {
-        setGeminiAssessment(data.aiAssessment);
-        if (data.urgencyScore) setGeminiUrgencyScore(data.urgencyScore);
+      const contentType = res.headers.get('content-type') || '';
+      if (res.ok && contentType.includes('application/json')) {
+        const data = await res.json();
+        if (data.success && data.aiAssessment) {
+          setGeminiAssessment(data.aiAssessment);
+          if (data.urgencyScore) setGeminiUrgencyScore(data.urgencyScore);
+        }
       }
     } catch (err) {
       console.error('[Gemini AI Assessment Request Error]', err);

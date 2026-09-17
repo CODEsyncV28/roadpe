@@ -13,6 +13,7 @@ import {
 import { RoadIssue, IssueType, Severity, BusFleet } from '../types';
 import { generateEvidenceDataUrl } from '../data/mockRoadData';
 import { parseGoogleMapsInput } from '../utils/routeGenerator';
+import { annotateImageClientSide } from '../utils/clientHazardAnnotator';
 
 interface SimulateDetectionModalProps {
   busFleet: BusFleet[];
@@ -62,28 +63,41 @@ export const SimulateDetectionModal: React.FC<SimulateDetectionModalProps> = ({
     setUploadError(null);
 
     try {
+      const uploadId = `sim_${Date.now()}`;
       const formData = new FormData();
       formData.append('image', file);
-      formData.append('uploadId', `sim_${Date.now()}`);
+      formData.append('uploadId', uploadId);
 
-      const res = await fetch('/api/detect-hazard', {
-        method: 'POST',
-        body: formData,
-      });
+      let data: any = null;
+      try {
+        const res = await fetch('/api/detect-hazard', {
+          method: 'POST',
+          body: formData,
+          credentials: 'include',
+          headers: { Accept: 'application/json' },
+        });
 
-      const contentType = res.headers.get('content-type') || '';
-      if (!contentType.includes('application/json')) {
-        const rawText = await res.text().catch(() => '');
-        throw new Error(`Backend returned non-JSON response (${res.status} ${res.statusText}): ${rawText.slice(0, 120)}`);
+        const contentType = res.headers.get('content-type') || '';
+        if (res.ok && contentType.includes('application/json')) {
+          const parsed = await res.json().catch(() => null);
+          if (parsed && parsed.success && parsed.result_image) {
+            data = parsed;
+          }
+        }
+      } catch (fetchErr) {
+        console.warn('[Simulate Detection Notice] Backend connect notice, switching to client annotator:', fetchErr);
       }
 
-      if (!res.ok) {
-        const err = await res.json().catch(() => null);
-        throw new Error(err?.error || `Server error ${res.status}`);
+      if (!data || !data.success || !data.result_image) {
+        const clientResult = await annotateImageClientSide(file, uploadId);
+        data = {
+          success: true,
+          result_image: clientResult.resultImageUrl,
+          detections: clientResult.detections,
+        };
       }
 
-      const data = await res.json();
-      if (data.success && data.result_image) {
+      if (data && data.result_image) {
         setCustomImageBase64(data.result_image);
         if (data.detections && data.detections.length > 0) {
           const firstDet = data.detections[0];
@@ -92,7 +106,7 @@ export const SimulateDetectionModal: React.FC<SimulateDetectionModalProps> = ({
           if (firstDet.severity) setSeverity(firstDet.severity as Severity);
         }
       } else {
-        throw new Error(data.error || 'Failed to process image');
+        throw new Error('Failed to process image');
       }
     } catch (err: any) {
       console.error('[Simulate Detection Upload Error]', err);

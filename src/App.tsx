@@ -51,8 +51,11 @@ export default function App() {
 
   // Fetch persisted problems from backend on initial mount
   useEffect(() => {
-    fetch('/api/problems')
-      .then((res) => (res.ok ? res.json() : null))
+    fetch('/api/problems', { credentials: 'include', headers: { Accept: 'application/json' } })
+      .then((res) => {
+        const contentType = res.headers.get('content-type') || '';
+        return res.ok && contentType.includes('application/json') ? res.json() : null;
+      })
       .then((data) => {
         if (data && data.success && Array.isArray(data.problems) && data.problems.length > 0) {
           const backendIssues: RoadIssue[] = data.problems.map((p: any) => {
@@ -153,10 +156,13 @@ export default function App() {
         return prev;
       });
       if (needsFetch) {
-        fetch('/api/problems')
-          .then(res => res.json())
+        fetch('/api/problems', { credentials: 'include', headers: { Accept: 'application/json' } })
+          .then(res => {
+            const contentType = res.headers.get('content-type') || '';
+            return res.ok && contentType.includes('application/json') ? res.json() : null;
+          })
           .then(data => {
-            if (data.success && data.problems) {
+            if (data && data.success && data.problems) {
               setIssues(data.problems);
             }
           })
@@ -236,7 +242,8 @@ export default function App() {
     // Persist to backend database as single source of truth
     fetch('/api/problems', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify(newIssue),
     }).catch((err) => console.warn('Problem persist note:', err));
 
@@ -275,7 +282,8 @@ export default function App() {
     if (newIssues.length > 0) {
       fetch('/api/problems', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify(newIssues),
       }).catch((err) => console.warn('Problem batch persist note:', err));
     }
@@ -329,7 +337,8 @@ export default function App() {
     // Sync with backend database
     fetch(`/api/problems/${updated.id}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify(updated),
     }).catch((e) => console.warn('Backend problem update sync note:', e));
 
@@ -353,10 +362,12 @@ export default function App() {
     try {
       const res = await fetch(`/api/problems/${issueId}/verify`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify({ verifiedBy: 'Authorized Municipal Inspector' }),
       });
-      const data = await res.json();
+      const contentType = res.headers.get('content-type') || '';
+      const data = res.ok && contentType.includes('application/json') ? await res.json() : null;
       if (data && data.success && data.problem) {
         setIssues((prev) =>
           prev.map((i) =>
@@ -405,10 +416,12 @@ export default function App() {
     try {
       const res = await fetch(`/api/problems/${issueId}/reject`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify({ reason: 'Rejected after municipal review: Non-actionable road variation' }),
       });
-      const data = await res.json();
+      const contentType = res.headers.get('content-type') || '';
+      const data = res.ok && contentType.includes('application/json') ? await res.json() : null;
       if (data && data.success && data.problem) {
         setIssues((prev) =>
           prev.map((i) =>
@@ -456,10 +469,12 @@ export default function App() {
     try {
       const res = await fetch(`/api/problems/${issueId}/assign`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify(assignmentData),
       });
-      const data = await res.json();
+      const contentType = res.headers.get('content-type') || '';
+      const data = res.ok && contentType.includes('application/json') ? await res.json() : null;
       if (data && data.success && data.problem) {
         const p = data.problem;
         setIssues((prev) =>
@@ -531,10 +546,12 @@ export default function App() {
     try {
       const res = await fetch(`/api/problems/${issueId}/status`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify({ status, notes }),
       });
-      const data = await res.json();
+      const contentType = res.headers.get('content-type') || '';
+      const data = res.ok && contentType.includes('application/json') ? await res.json() : null;
       if (data && data.success && data.problem) {
         setIssues((prev) =>
           prev.map((i) =>

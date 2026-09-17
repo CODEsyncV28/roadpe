@@ -722,5 +722,259 @@
         "note": "AI YOLOv8 model detected pothole with 93.3% confidence from uploaded media."
       }
     ]
+  },
+  {
+    "id": "RV-0013",
+    "type": "waterlogging",
+    "detectionType": "waterlogging",
+    "title": "Road Waterlogging & Ponding Submergence",
+    "locationName": "Station Road, Bharuch",
+    "userEnteredLocation": "Station Road, Bharuch",
+    "sourceFile": "upload_1789567316902_1f8zctl.jpg",
+    "uploadTimestamp": "2026-09-17 19:19:35 IST",
+    "lat": 21.7051,
+    "lng": 72.9959,
+    "latitude": 21.7051,
+    "longitude": 72.9959,
+    "location": {
+      "latitude": 21.7051,
+      "longitude": 72.9959,
+      "city": "",
+      "district": "",
+      "state": "",
+      "country": "",
+      "address": "Station Road, Bharuch",
+      "formattedAddress": "Station Road, Bharuch"
+    },
+    "hasSelectedLocation": true,
+    "googleMapsUrl": "https://www.google.com/maps?q=21.705100,72.995900",
+    "severity": "HIGH",
+    "priority": "Critical",
+    "confidence": 92.4,
+    "busId": "BUS-07",
+    "busRoute": "Survey Transit Corridor",
+    "route": "Survey Transit Corridor",
+    "timestamp": "2026-09-17 19:19:35 IST",
+    "status": "Pending",
+    "verification": "Pending Verification",
+    "source": "Uploaded Image / Video",
+    "evidenceImage": "/results/result_1789672773859_k1hyhes.jpg?t=1789672775483",
+    "boundingBoxes": [
+      {
+        "id": "box-1789672775498-0",
+        "label": "waterlogging_detected",
+        "confidence": 92.4,
+        "x": 28,
+        "y": 47.9,
+        "width": 35.9,
+        "height": 27.9,
+        "color": "#ef4444"
+      }
+    ],
+    "telemetry": {
+      "speedKmh": 36.5,
+      "zVibrationG": 2.45,
+      "roadRoughnessIRI": 5.6,
+      "cameraFov": "Uploaded Survey Media",
+      "weatherCondition": "Standard Survey Lighting"
+    },
+    "estimatedDimensions": {
+      "lengthM": 1.8,
+      "widthM": 1.2,
+      "blockedLanes": 2
+    },
+    "roadCondition": "Critical",
+    "priorityScore": 92,
+    "workflowHistory": [
+      {
+        "stage": "Detected",
+        "timestamp": "2026-09-17 19:19:35 IST",
+        "note": "AI YOLOv8 model detected waterlogging with 92.4% confidence from uploaded media at Station Road, Bharuch."
+      }
+    ]
+  },
+  {
+    "id": "RV-0014",
+    "type": "road_damage",
+    "detectionType": "road_damage",
+    "title": "Transverse Asphalt Fatigue Cracks",
+    "locationName": "Station Road, Bharuch",
+    "userEnteredLocation": "Station Road, Bharuch",
+    "sourceFile": "upload_1789567316902_1f8zctl.jpg",
+    "uploadTimestamp": "2026-09-17 19:19:35 IST",
+    "lat": 21.7051,
+    "lng": 72.9959,
+    "latitude": 21.7051,
+    "longitude": 72.9959,
+    "location": {
+      "latitude": 21.7051,
+      "longitude": 72.9959,
+      "city": "",
+      "district": "",
+      "state": "",
+      "country": "",
+      "address": "Station Road, Bharuch",
+      "formattedAddress": "Station Road, Bharuch"
+    },
+    "hasSelectedLocation": true,
+    "googleMapsUrl": "https://www.google.com/maps?q=21.705100,72.995900",
+    "severity": "MEDIUM",
+    "priority": "Medium",
+    "confidence": 89.1,
+    "busId": "BUS-07",
+    "busRoute": "Survey Transit Corridor",
+    "route": "Survey Transit Corridor",
+    "timestamp": "2026-09-17 19:19:35 IST",
+    "status": "Pending",
+    "verification": "Pending Verification",
+    "source": "Uploaded Image / Video",
+    "evidenceImage": "/results/result_1789672773859_k1hyhes.jpg?t=1789672775483",
+    "boundingBoxes": [
+      {
+        "id": "box-1789672775499-1",
+        "label": "road_damage_detected",
+        "confidence": 89.1,
+        "x": 62,
+        "y": 62.1,
+        "width": 25.9,
+        "height": 22.1,
+        "color": "#f59e0b"
+      }
+    ],
+    "telemetry": {
+      "speedKmh": 36.5,
+      "zVibrationG": 1.35,
+      "roadRoughnessIRI": 5.6,
+      "cameraFov": "Uploaded Survey Media",
+      "weatherCondition": "Standard Survey Lighting"
+    },
+    "estimatedDimensions": {
+      "lengthM": 1.8,
+      "widthM": 1.2,
+      "blockedLanes": 1
+    },
+    "roadCondition": "Poor",
+    "priorityScore": 90,
+    "workflowHistory": [
+      {
+        "stage": "Detected",
+        "timestamp": "2026-09-17 19:19:35 IST",
+        "note": "AI YOLOv8 model detected road_damage with 89.1% confidence from uploaded media at Station Road, Bharuch."
+      }
+    ]
+  },
+  {
+    "id": "RV-0015",
+    "type": "waterlogging",
+    "detectionType": "waterlogging",
+    "title": "Road Waterlogging & Ponding Submergence",
+    "locationName": "Location not selected",
+    "userEnteredLocation": "Location not selected",
+    "sourceFile": "test_image.jpg",
+    "uploadTimestamp": "2026-09-17 19:24:21 IST",
+    "lat": 0,
+    "lng": 0,
+    "hasSelectedLocation": false,
+    "severity": "HIGH",
+    "priority": "Critical",
+    "confidence": null,
+    "busId": "BUS-07",
+    "busRoute": "Survey Transit Corridor",
+    "route": "Survey Transit Corridor",
+    "timestamp": "2026-09-17 19:24:21 IST",
+    "status": "Pending",
+    "verification": "Pending Verification",
+    "source": "Uploaded Image / Video",
+    "evidenceImage": "/results/result_1789673061271_6jct2cx.jpg?t=1789673061317",
+    "boundingBoxes": [
+      {
+        "id": "box-1789673061342-0",
+        "label": "waterlogging_detected",
+        "confidence": null,
+        "x": 0,
+        "y": 0,
+        "width": 0,
+        "height": 0,
+        "color": "#ef4444"
+      }
+    ],
+    "telemetry": {
+      "speedKmh": 36.5,
+      "zVibrationG": 2.45,
+      "roadRoughnessIRI": 5.6,
+      "cameraFov": "Uploaded Survey Media",
+      "weatherCondition": "Standard Survey Lighting"
+    },
+    "estimatedDimensions": {
+      "lengthM": 1.8,
+      "widthM": 1.2,
+      "blockedLanes": 2
+    },
+    "roadCondition": "Critical",
+    "priorityScore": 93,
+    "workflowHistory": [
+      {
+        "stage": "Detected",
+        "timestamp": "2026-09-17 19:24:21 IST",
+        "note": "AI YOLOv8 model detected waterlogging with NaN% confidence from uploaded media."
+      }
+    ]
+  },
+  {
+    "id": "RV-0016",
+    "type": "waterlogging",
+    "detectionType": "waterlogging",
+    "title": "Road Waterlogging & Ponding Submergence",
+    "locationName": "Location not selected",
+    "userEnteredLocation": "Location not selected",
+    "sourceFile": "test_image.jpg",
+    "uploadTimestamp": "2026-09-17 19:25:11 IST",
+    "lat": 0,
+    "lng": 0,
+    "hasSelectedLocation": false,
+    "severity": "HIGH",
+    "priority": "Critical",
+    "confidence": 93.4,
+    "busId": "BUS-07",
+    "busRoute": "Survey Transit Corridor",
+    "route": "Survey Transit Corridor",
+    "timestamp": "2026-09-17 19:25:11 IST",
+    "status": "Pending",
+    "verification": "Pending Verification",
+    "source": "Uploaded Image / Video",
+    "evidenceImage": "/results/result_1789673111904_w3i7pda.jpg?t=1789673111940",
+    "boundingBoxes": [
+      {
+        "id": "box-1789673111960-0",
+        "label": "waterlogging_detected",
+        "confidence": 93.4,
+        "x": 0,
+        "y": 0,
+        "width": 0,
+        "height": 0,
+        "color": "#ef4444"
+      }
+    ],
+    "telemetry": {
+      "speedKmh": 36.5,
+      "zVibrationG": 2.45,
+      "roadRoughnessIRI": 5.6,
+      "cameraFov": "Uploaded Survey Media",
+      "weatherCondition": "Standard Survey Lighting"
+    },
+    "estimatedDimensions": {
+      "lengthM": 1.8,
+      "widthM": 1.2,
+      "blockedLanes": 2
+    },
+    "roadCondition": "Critical",
+    "priorityScore": 81,
+    "workflowHistory": [
+      {
+        "stage": "Detected",
+        "timestamp": "2026-09-17 19:25:11 IST",
+        "note": "AI YOLOv8 model detected waterlogging with 93.4% confidence from uploaded media."
+      }
+    ]
   }
 ]

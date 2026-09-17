@@ -1,6 +1,7 @@
 import React from 'react';
 import { 
   Bus, 
+  MapPin,
   ShieldAlert, 
   Cpu, 
   Wrench, 
@@ -26,6 +27,8 @@ interface HeaderProps {
   onOpenBusCameraModal: (busId?: string) => void;
   onOpenManualAddModal: () => void;
   currentTime: string;
+  trackingTab?: 'PENDING' | 'IN_PROGRESS' | 'SOLVED';
+  setTrackingTab?: (tab: 'PENDING' | 'IN_PROGRESS' | 'SOLVED') => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -38,8 +41,10 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenBusCameraModal,
   onOpenManualAddModal,
   currentTime,
+  trackingTab,
+  setTrackingTab,
 }) => {
-  const isSolved = (s: string) => s === 'Solved' || s === 'RESOLVED';
+  const isSolved = (s: string) => s === 'Solved' || s === 'SOLVED' || s === 'RESOLVED';
   const isFalsePositive = (i: RoadIssue) => i.verification === 'FALSE_POSITIVE' || i.verification === 'False Positive' || i.status === 'Closed' || i.status === 'CLOSED';
   const isPending = (s: string) => s === 'Pending' || s === 'PENDING';
   const isInProgress = (s: string) => s === 'In Progress' || s === 'IN_PROGRESS' || s === 'DISPATCHED';
@@ -64,34 +69,26 @@ export const Header: React.FC<HeaderProps> = ({
       {/* Top Bar: Identity & Realtime System Telemetry */}
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-2.5">
         
-        {/* Left: Branding & Hackathon Context */}
-        <div className="flex items-center gap-3">
-          <div className="relative flex items-center justify-center w-10 h-10 rounded-lg bg-cyan-950/70 border border-cyan-500/40 text-cyan-400 shadow-[0_0_15px_rgba(6,182,212,0.25)]">
-            <Radio className="w-5 h-5 animate-pulse text-cyan-400" />
-            <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
+        {/* Left: Brand Identity */}
+        <div className="flex items-center gap-2.5">
+          {/* UrbanSense Icon: Map Pin + Bus Transport + Urban Sensing */}
+          <div 
+            className="relative flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-cyan-950/80 border border-cyan-500/40 text-cyan-400 shadow-[0_0_12px_rgba(6,182,212,0.2)] shrink-0"
+            title="UrbanSense"
+            aria-label="UrbanSense Logo"
+          >
+            <MapPin className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-cyan-400" />
+            <Bus className="w-2.5 h-2.5 text-cyan-200 absolute -top-0.5" />
+            {/* Sensing pulse */}
+            <span className="absolute -top-1 -right-1 flex h-2 w-2">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
             </span>
           </div>
 
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-xl font-extrabold tracking-wider text-slate-50 uppercase flex items-center gap-2 font-mono">
-                <span>RoadVision</span>
-                <span className="px-1.5 py-0.5 rounded text-xs font-mono font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 tracking-normal">
-                  AI
-                </span>
-              </h1>
-              <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-mono bg-slate-800/80 text-slate-300 border border-slate-700/60">
-                BEL | SIH26124
-              </span>
-            </div>
-            <p className="text-[11px] text-slate-400 flex items-center gap-1.5 tracking-tight">
-              <span>Processes uploaded road footage from buses</span>
-              <span className="text-slate-600">•</span>
-              <span className="text-cyan-400 font-mono">Gujarat Transit Network (Bharuch • Vadodara)</span>
-            </p>
-          </div>
+          <h1 className="text-lg sm:text-xl font-extrabold tracking-wider text-slate-50 uppercase font-mono select-none">
+            URBANSENSE
+          </h1>
         </div>
 
         {/* Center: System Status & Telemetry Indicators */}
@@ -239,19 +236,40 @@ export const Header: React.FC<HeaderProps> = ({
             <span className="text-amber-300 font-bold">{mediumCount}</span>
           </div>
           <span className="text-slate-700">|</span>
-          <div className="flex items-center gap-1.5" title="Problems with Pending status">
+          <div 
+            onClick={() => {
+              setActiveLayer('MAINTENANCE_LAYER');
+              setTrackingTab?.('PENDING');
+            }}
+            className="flex items-center gap-1.5 cursor-pointer hover:opacity-80 transition-opacity" 
+            title="View problems with Pending status"
+          >
             <span className="w-2 h-2 rounded-full bg-amber-500"></span>
             <span className="text-slate-400">Pending:</span>
             <span className="text-amber-400 font-semibold">{pendingCount}</span>
           </div>
           <span className="text-slate-700">|</span>
-          <div className="flex items-center gap-1.5" title="Problems currently In Progress">
+          <div 
+            onClick={() => {
+              setActiveLayer('MAINTENANCE_LAYER');
+              setTrackingTab?.('IN_PROGRESS');
+            }}
+            className="flex items-center gap-1.5 cursor-pointer hover:opacity-80 transition-opacity" 
+            title="View problems currently In Progress"
+          >
             <span className="w-2 h-2 rounded-full bg-cyan-400"></span>
             <span className="text-slate-400">In Progress:</span>
             <span className="text-cyan-400 font-semibold">{inProgressCount}</span>
           </div>
           <span className="text-slate-700">|</span>
-          <div className="flex items-center gap-1.5" title="Solved and Repaired Problems">
+          <div 
+            onClick={() => {
+              setActiveLayer('MAINTENANCE_LAYER');
+              setTrackingTab?.('SOLVED');
+            }}
+            className="flex items-center gap-1.5 cursor-pointer hover:opacity-80 transition-opacity" 
+            title="View Solved and Repaired Problems"
+          >
             <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
             <span className="text-slate-400">Repaired / Solved:</span>
             <span className="text-emerald-400 font-semibold">{solvedCount}</span>
